@@ -1,0 +1,60 @@
+name: colibri
+description: "Colibri — a hybrid mobile e-reader: normal portrait reading and a landscape fast-reading mode."
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # Internationalization (pinned by flutter_localizations).
+  intl: any
+
+  # State management.
+  flutter_riverpod: ^2.5.1
+
+  # Routing.
+  go_router: ^14.2.0
+
+  # Local database (Drift / SQLite). Tables/DAOs are added in Phase 2.
+  drift: ^2.18.0
+  sqlite3_flutter_libs: ^0.5.24
+
+  # Backend (Supabase). Client/init is wired in Phase 1.
+  supabase_flutter: ^2.5.6
+
+  # Book import — system file picker (used in Phase 6).
+  file_picker: ^8.0.6
+
+  # Filesystem helpers.
+  path_provider: ^2.1.3
+  path: ^1.9.0
+
+  # Crash reporting (initialized in Phase 15).
+  sentry_flutter: ^8.3.0
+
+  # Analytics SDK (Firebase Analytics or Amplitude) is added in Phase 15.
+  # The AnalyticsRepository interface + a no-op default already exist so call
+  # sites are ready before the SDK is chosen and configured.
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+  # Drift code generation — runs once local tables are added in Phase 2.
+  drift_dev: ^2.18.0
+  build_runner: ^2.4.11
+
+flutter:
+  uses-material-design: true
+  # Enables `flutter gen-l10n` (configured in l10n.yaml).
+  generate: true

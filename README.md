@@ -1,0 +1,113 @@
+# Colibri
+
+A hybrid mobile e-reader for iOS and Android.
+
+- **Portrait** = normal ebook reading.
+- **Landscape** = focused fast-reading mode (centered word/phrase).
+
+> Read normally when you want depth. Rotate your phone when you want speed.
+
+Colibri is a serious reader first; fast mode is an additional, reversible reading mode. The core loop is: import/open a book → read in portrait → rotate to landscape for fast mode → adjust WPM → rotate back without losing position → resume later.
+
+See [`CLAUDE.md`](CLAUDE.md), [`00_PROJECT_CONTEXT.md`](00_PROJECT_CONTEXT.md), and [`01_DEVELOPMENT_TASK_PLAN.md`](01_DEVELOPMENT_TASK_PLAN.md) for the authoritative product/spec and the phased task plan.
+
+## Tech stack
+
+Flutter · Dart · Riverpod · Drift/SQLite · Supabase (Auth/Postgres/Storage/Edge Functions) · Sentry · go_router · `flutter gen-l10n` · Maestro (E2E).
+
+## Project status
+
+This is **Phase 0: Project Foundation** only. Screens are navigable placeholders; there is no reader, import, Supabase, or Drift logic yet. Those land in later phases (see the task plan).
+
+## First-time setup
+
+The native `android/` and `ios/` folders are **not** checked in yet. After cloning, generate them and fetch packages:
+
+```bash
+# 1. Generate the native platform projects without touching lib/.
+flutter create --platforms=android,ios --org com.colibri .
+
+# 2. Fetch dependencies.
+flutter pub get
+
+# 3. Generate localizations (creates lib/app/localization/generated/).
+flutter gen-l10n
+
+# 4. Create your local env file from the template and fill in values.
+cp .env.example .env.dev
+```
+
+> Until `flutter gen-l10n` runs, the analyzer will report a missing
+> `app_localizations.dart` import — that file is generated from the ARB files.
+
+## Running
+
+Environment values are injected at run/build time via `--dart-define-from-file`
+(nothing secret is hardcoded). The app fails fast in `main()` if required keys
+(`SUPABASE_URL`, `SUPABASE_ANON_KEY`) are missing.
+
+```bash
+flutter run --dart-define-from-file=.env.dev
+flutter run --dart-define-from-file=.env.staging
+flutter run --dart-define-from-file=.env.production
+```
+
+Build examples:
+
+```bash
+flutter build apk    --dart-define-from-file=.env.production
+flutter build ipa    --dart-define-from-file=.env.production
+```
+
+## Testing
+
+```bash
+flutter test
+```
+
+## Project structure
+
+```
+lib/
+  main.dart                 # bootstrap: load+validate config, run app
+  app/
+    app.dart                # MaterialApp.router (theme + l10n + routing)
+    router/                 # go_router routes, shell (bottom tabs), unknown route
+    theme/                  # light/dark app themes, sepia reader palette, tokens
+    localization/           # ARB files + locale provider (+ generated output)
+  core/
+    config/                 # AppEnvironment + AppConfig (env variables)
+    result/  errors/        # Result<T> + typed Failures
+    constants/              # product constants (WPM rules, timings)
+  data/
+    local/  remote/         # Drift (Phase 2) / Supabase (Phase 1) — placeholders
+    repositories/           # 14 repository interfaces (boundaries) + barrel
+  features/                 # onboarding, auth, home, catalog, library,
+                            # book_detail, import, profile, settings, reader
+  shared/                   # shared widgets/models/services
+test/                       # unit tests
+integration_test/  maestro/ # E2E (Phase 16)
+supabase/                   # migrations + policies (Phase 1)
+```
+
+### Architecture rules (enforced going forward)
+
+- UI/state never calls Supabase or Drift directly — always through a repository.
+- Reader engine and fast-mode engine stay UI-independent and testable.
+- All user-facing strings are localized (`ru-RU` primary, `en-US` fallback).
+
+## Environment variables
+
+| Key                 | Required | Used in  | Notes                          |
+| ------------------- | -------- | -------- | ------------------------------ |
+| `APP_ENV`           | no       | core     | `dev` / `staging` / `production` |
+| `SUPABASE_URL`      | yes      | Phase 1  | fails fast if missing          |
+| `SUPABASE_ANON_KEY` | yes      | Phase 1  | fails fast if missing          |
+| `SENTRY_DSN`        | no       | Phase 15 | crash reporting                |
+| `ANALYTICS_ENABLED` | no       | Phase 15 | keep `false` in dev            |
+
+## Next task
+
+**Phase 1 — TASK-0101: Create Supabase project** and wire the Supabase client
+provider (TASK-0106), followed by **Phase 2 — TASK-0201: Create the Drift
+database** and DAOs.

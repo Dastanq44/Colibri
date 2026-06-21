@@ -1,0 +1,10 @@
+# Configuration for `flutter gen-l10n`.
+# Run `flutter gen-l10n` (or just `flutter run`) to generate AppLocalizations
+# into the output-dir below before building.
+arb-dir: lib/app/localization/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+output-class: AppLocalizations
+output-dir: lib/app/localization/generated
+synthetic-package: false
+nullable-getter: false

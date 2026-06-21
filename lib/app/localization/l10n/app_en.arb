@@ -1,0 +1,48 @@
+{
+  "@@locale": "en",
+  "appTitle": "Colibri",
+  "@appTitle": {
+    "description": "Application name shown to users."
+  },
+  "navHome": "Home",
+  "navCatalog": "Catalog",
+  "navLibrary": "My Books",
+  "navProfile": "Profile",
+  "comingSoon": "This screen will be implemented in a later phase.",
+  "@comingSoon": {
+    "description": "Generic placeholder body for not-yet-built screens."
+  },
+  "onboardingTitle": "Welcome",
+  "authTitle": "Sign in",
+  "homeTitle": "Home",
+  "catalogTitle": "Catalog",
+  "libraryTitle": "My Books",
+  "profileTitle": "Profile",
+  "settingsTitle": "Settings",
+  "importTitle": "Import book",
+  "bookDetailTitle": "Book details",
+  "readerTitle": "Reader",
+  "bookIdLabel": "Book ID: {bookId}",
+  "@bookIdLabel": {
+    "description": "Shows which book a placeholder screen was opened for.",
+    "placeholders": {
+      "bookId": { "type": "String" }
+    }
+  },
+  "routeNotFoundTitle": "Page not found",
+  "routeNotFoundBody": "We couldn't find: {location}",
+  "@routeNotFoundBody": {
+    "description": "Body of the unknown-route screen.",
+    "placeholders": {
+      "location": { "type": "String" }
+    }
+  },
+  "goToHome": "Go to Home",
+  "devNavHeader": "Developer navigation",
+  "openOnboarding": "Open onboarding",
+  "openAuth": "Open authentication",
+  "openImport": "Open import",
+  "openSettings": "Open settings",
+  "openSampleBook": "Open sample book details",
+  "openSampleReader": "Open sample reader"
+}
