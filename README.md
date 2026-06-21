@@ -17,7 +17,13 @@ Flutter · Dart · Riverpod · Drift/SQLite · Supabase (Auth/Postgres/Storage/E
 
 ## Project status
 
-This is **Phase 0: Project Foundation** only. Screens are navigable placeholders; there is no reader, import, Supabase, or Drift logic yet. Those land in later phases (see the task plan).
+Foundational phases are landing in order:
+
+- ✅ **Phase 0 — Project foundation**: routing, placeholder screens, theme, localization, env config, repository interfaces.
+- ✅ **Phase 2 — Local database**: Drift/SQLite tables, DAOs, defaults, sync status, sync queue, device id service.
+- 🚧 **Phase 1 — Supabase backend foundation**: SQL migrations, RLS, storage buckets, seed data, and a dev-safe Supabase client provider. Backend SQL lives in [`supabase/`](supabase/) — see [`supabase/README.md`](supabase/README.md) to apply it.
+
+There is still no auth UI, import, reader, sync engine, or fast-mode logic — those land in later phases (see the task plan).
 
 ## First-time setup
 
@@ -30,11 +36,14 @@ flutter create --platforms=android,ios --org com.colibri .
 # 2. Fetch dependencies.
 flutter pub get
 
-# 3. Generate localizations (creates lib/app/localization/generated/).
+# 3. Generate Drift code (*.g.dart) and localizations.
+dart run build_runner build --delete-conflicting-outputs
 flutter gen-l10n
 
 # 4. Create your local env file from the template and fill in values.
 cp .env.example .env.dev
+
+# 5. (Optional) Stand up the backend — see supabase/README.md.
 ```
 
 > Until `flutter gen-l10n` runs, the analyzer will report a missing
@@ -83,14 +92,15 @@ lib/
     result/  errors/        # Result<T> + typed Failures
     constants/              # product constants (WPM rules, timings)
   data/
-    local/  remote/         # Drift (Phase 2) / Supabase (Phase 1) — placeholders
+    local/                  # Drift database, tables, DAOs, device id (Phase 2)
+    remote/                 # Supabase client provider + bootstrap (Phase 1)
     repositories/           # 14 repository interfaces (boundaries) + barrel
   features/                 # onboarding, auth, home, catalog, library,
                             # book_detail, import, profile, settings, reader
   shared/                   # shared widgets/models/services
 test/                       # unit tests
 integration_test/  maestro/ # E2E (Phase 16)
-supabase/                   # migrations + policies (Phase 1)
+supabase/                   # migrations, seed.sql, policies (Phase 1)
 ```
 
 ### Architecture rules (enforced going forward)
@@ -111,6 +121,6 @@ supabase/                   # migrations + policies (Phase 1)
 
 ## Next task
 
-**Phase 1 — TASK-0101: Create Supabase project** and wire the Supabase client
-provider (TASK-0106), followed by **Phase 2 — TASK-0201: Create the Drift
-database** and DAOs.
+Apply the backend (see [`supabase/README.md`](supabase/README.md)), then
+**Phase 3 — Auth & profile** (TASK-0301..0305): build auth UI and implement
+`AuthRepository`/`ProfileRepository` on top of Supabase Auth.
