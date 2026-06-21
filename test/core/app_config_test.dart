@@ -18,7 +18,40 @@ void main() {
         config.missingRequiredKeys,
         containsAll(<String>['SUPABASE_URL', 'SUPABASE_ANON_KEY']),
       );
-      expect(config.assertValid, throwsStateError);
+    });
+
+    test('dev tolerates missing Supabase keys (does not throw)', () {
+      const config = AppConfig(
+        environment: AppEnvironment.dev,
+        supabaseUrl: '',
+        supabaseAnonKey: '',
+        sentryDsn: '',
+        analyticsEnabled: false,
+      );
+
+      expect(config.isValid, isFalse);
+      // Phase 0 placeholder app must still boot in dev without a backend.
+      expect(config.assertValid, returnsNormally);
+    });
+
+    test('staging and production fail clearly on missing Supabase keys', () {
+      const staging = AppConfig(
+        environment: AppEnvironment.staging,
+        supabaseUrl: '',
+        supabaseAnonKey: '',
+        sentryDsn: '',
+        analyticsEnabled: false,
+      );
+      const production = AppConfig(
+        environment: AppEnvironment.production,
+        supabaseUrl: '',
+        supabaseAnonKey: '',
+        sentryDsn: '',
+        analyticsEnabled: false,
+      );
+
+      expect(staging.assertValid, throwsStateError);
+      expect(production.assertValid, throwsStateError);
     });
 
     test('is valid when required keys are present', () {

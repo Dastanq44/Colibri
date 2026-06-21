@@ -7,8 +7,9 @@ import 'core/config/app_config.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load and validate environment configuration. Fails fast and clearly if a
-  // required value (e.g. SUPABASE_URL) is missing.
+  // Load and validate environment configuration. In dev, missing Supabase
+  // keys are tolerated (the placeholder app still boots); in staging and
+  // production a missing required value fails fast and clearly.
   final config = AppConfig.fromEnvironment();
   config.assertValid();
 

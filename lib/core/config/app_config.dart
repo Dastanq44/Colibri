@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app_environment.dart';
@@ -47,17 +48,28 @@ class AppConfig {
 
   bool get isValid => missingRequiredKeys.isEmpty;
 
-  /// Fails loudly (and early) when required values are missing so that
-  /// misconfiguration is obvious during development instead of surfacing as a
-  /// confusing runtime error deep inside a feature.
+  /// Validates configuration with environment-appropriate strictness.
+  ///
+  /// - In **dev**, missing Supabase keys are tolerated so the Phase 0
+  ///   placeholder app can still run without a backend; a warning is logged
+  ///   instead of crashing.
+  /// - In **staging/production**, missing required values fail loudly and
+  ///   early so misconfiguration is obvious before shipping.
   void assertValid() {
     if (isValid) return;
-    throw StateError(
-      'Missing required environment values: ${missingRequiredKeys.join(', ')}.\n'
-      'Provide them at run time, e.g. '
-      '`flutter run --dart-define-from-file=.env.${environment.name}`.\n'
-      'See .env.example for the full list of keys.',
-    );
+
+    final message =
+        'Missing required environment values: ${missingRequiredKeys.join(', ')}.\n'
+        'Provide them at run time, e.g. '
+        '`flutter run --dart-define-from-file=.env.${environment.name}`.\n'
+        'See .env.example for the full list of keys.';
+
+    if (environment.isDev) {
+      debugPrint('⚠️  $message\nContinuing in dev with placeholder config.');
+      return;
+    }
+
+    throw StateError(message);
   }
 }
 

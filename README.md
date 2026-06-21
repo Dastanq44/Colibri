@@ -9,7 +9,7 @@ A hybrid mobile e-reader for iOS and Android.
 
 Colibri is a serious reader first; fast mode is an additional, reversible reading mode. The core loop is: import/open a book → read in portrait → rotate to landscape for fast mode → adjust WPM → rotate back without losing position → resume later.
 
-See [`CLAUDE.md`](CLAUDE.md), [`00_PROJECT_CONTEXT.md`](00_PROJECT_CONTEXT.md), and [`01_DEVELOPMENT_TASK_PLAN.md`](01_DEVELOPMENT_TASK_PLAN.md) for the authoritative product/spec and the phased task plan.
+See [`CLAUDE.md`](CLAUDE.md), [`docs/00_PROJECT_CONTEXT.md`](docs/00_PROJECT_CONTEXT.md), and [`docs/01_DEVELOPMENT_TASK_PLAN.md`](docs/01_DEVELOPMENT_TASK_PLAN.md) for the authoritative product/spec and the phased task plan. Background research lives in [`docs/research/`](docs/research/).
 
 ## Tech stack
 
@@ -43,10 +43,13 @@ cp .env.example .env.dev
 ## Running
 
 Environment values are injected at run/build time via `--dart-define-from-file`
-(nothing secret is hardcoded). The app fails fast in `main()` if required keys
-(`SUPABASE_URL`, `SUPABASE_ANON_KEY`) are missing.
+(nothing secret is hardcoded). Validation is environment-aware: in **dev** the
+Phase 0 placeholder app boots even without Supabase keys (a warning is logged),
+while **staging** and **production** fail fast in `main()` if `SUPABASE_URL` or
+`SUPABASE_ANON_KEY` is missing.
 
 ```bash
+# Dev runs even without a configured .env.dev (placeholders only).
 flutter run --dart-define-from-file=.env.dev
 flutter run --dart-define-from-file=.env.staging
 flutter run --dart-define-from-file=.env.production
@@ -101,8 +104,8 @@ supabase/                   # migrations + policies (Phase 1)
 | Key                 | Required | Used in  | Notes                          |
 | ------------------- | -------- | -------- | ------------------------------ |
 | `APP_ENV`           | no       | core     | `dev` / `staging` / `production` |
-| `SUPABASE_URL`      | yes      | Phase 1  | fails fast if missing          |
-| `SUPABASE_ANON_KEY` | yes      | Phase 1  | fails fast if missing          |
+| `SUPABASE_URL`      | staging/prod | Phase 1 | dev tolerates absence; fails fast in staging/prod |
+| `SUPABASE_ANON_KEY` | staging/prod | Phase 1 | dev tolerates absence; fails fast in staging/prod |
 | `SENTRY_DSN`        | no       | Phase 15 | crash reporting                |
 | `ANALYTICS_ENABLED` | no       | Phase 15 | keep `false` in dev            |
 
