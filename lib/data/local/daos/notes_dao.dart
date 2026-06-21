@@ -1,0 +1,53 @@
+import 'package:drift/drift.dart';
+
+import '../app_database.dart';
+import '../db_time.dart';
+import '../sync_status.dart';
+import '../tables/annotation_tables.dart';
+
+part 'notes_dao.g.dart';
+
+/// Notes and bookmarks. Deletions are soft (set `deletedAt` + sync status) so
+/// they can be reconciled with the cloud later.
+@DriftAccessor(tables: [LocalNotes, LocalBookmarks])
+class NotesDao extends DatabaseAccessor<AppDatabase> with _$NotesDaoMixin {
+  NotesDao(super.db);
+
+  // --- Notes ---
+
+  Future<void> upsertNote(LocalNotesCompanion note) =>
+      into(localNotes).insertOnConflictUpdate(note);
+
+  Future<List<LocalNote>> getNotesForBook(String bookId) =>
+      (select(localNotes)
+            ..where((n) => n.bookId.equals(bookId) & n.deletedAt.isNull()))
+          .get();
+
+  Future<void> softDeleteNote(String id) async {
+    await (update(localNotes)..where((n) => n.id.equals(id))).write(
+      LocalNotesCompanion(
+        deletedAt: Value(dbNow()),
+        syncStatus: const Value(SyncStatus.deleted),
+      ),
+    );
+  }
+
+  // --- Bookmarks ---
+
+  Future<void> upsertBookmark(LocalBookmarksCompanion bookmark) =>
+      into(localBookmarks).insertOnConflictUpdate(bookmark);
+
+  Future<List<LocalBookmark>> getBookmarksForBook(String bookId) =>
+      (select(localBookmarks)
+            ..where((b) => b.bookId.equals(bookId) & b.deletedAt.isNull()))
+          .get();
+
+  Future<void> softDeleteBookmark(String id) async {
+    await (update(localBookmarks)..where((b) => b.id.equals(id))).write(
+      LocalBookmarksCompanion(
+        deletedAt: Value(dbNow()),
+        syncStatus: const Value(SyncStatus.deleted),
+      ),
+    );
+  }
+}
