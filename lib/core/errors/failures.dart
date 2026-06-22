@@ -40,3 +40,29 @@ final class StorageFailure extends Failure {
 final class BackendUnavailableFailure extends Failure {
   const BackendUnavailableFailure([super.message = 'Backend is not configured.']);
 }
+
+/// The user dismissed/cancelled an interaction (e.g. the file picker). UI
+/// should treat this quietly, not as an error.
+final class CanceledFailure extends Failure {
+  const CanceledFailure([super.message = 'Cancelled.']);
+}
+
+/// The selected file extension/type is not supported for import.
+final class UnsupportedFormatFailure extends Failure {
+  const UnsupportedFormatFailure([super.message = 'Unsupported file type.']);
+}
+
+/// The selected file exceeds the maximum allowed import size.
+final class FileTooLargeFailure extends Failure {
+  const FileTooLargeFailure([super.message = 'File is too large.']);
+}
+
+/// The selected file could not be found or read.
+final class FileMissingFailure extends Failure {
+  const FileMissingFailure([super.message = 'File could not be read.']);
+}
+
+/// The book is already present locally (matched by checksum).
+final class DuplicateFailure extends Failure {
+  const DuplicateFailure([super.message = 'Already imported.']);
+}

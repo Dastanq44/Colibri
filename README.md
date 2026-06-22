@@ -22,9 +22,10 @@ Foundational phases are landing in order:
 - ✅ **Phase 0 — Project foundation**: routing, placeholder screens, theme, localization, env config, repository interfaces.
 - ✅ **Phase 2 — Local database**: Drift/SQLite tables, DAOs, defaults, sync status, sync queue, device id service.
 - ✅ **Phase 1 — Supabase backend foundation**: SQL migrations, RLS, storage buckets, seed data, and a dev-safe Supabase client provider. Backend SQL lives in [`supabase/`](supabase/) — see [`supabase/README.md`](supabase/README.md) to apply it.
-- 🚧 **Phase 3 — Auth & profile**: Supabase-backed `AuthRepository`/`ProfileRepository`, Riverpod auth/profile providers, and real Auth + Profile screens (dev-safe when no backend is configured).
+- ✅ **Phase 3 — Auth & profile**: Supabase-backed `AuthRepository`/`ProfileRepository`, Riverpod auth/profile providers, and real Auth + Profile screens (dev-safe when no backend is configured).
+- 🚧 **Local import + My Books (local)**: pick an EPUB/TXT/PDF → validate → checksum (dedupe) → copy into app storage → create local book/shelf/progress rows → appears in My Books. No cloud upload yet.
 
-There is still no import, reader, sync engine, or fast-mode logic — those land in later phases (see the task plan).
+There is still no reader rendering, fast mode, or sync engine — those land in later phases (see the task plan).
 
 ## First-time setup
 
@@ -34,17 +35,15 @@ The native `android/` and `ios/` folders are **not** checked in yet. After cloni
 # 1. Generate the native platform projects without touching lib/.
 flutter create --platforms=android,ios --org com.colibri .
 
-# 2. Fetch dependencies.
+# 2. Fetch dependencies, generate localizations, then Drift code.
 flutter pub get
-
-# 3. Generate Drift code (*.g.dart) and localizations.
-dart run build_runner build --delete-conflicting-outputs
 flutter gen-l10n
+dart run build_runner build --delete-conflicting-outputs
 
-# 4. Create your local env file from the template and fill in values.
+# 3. Create your local env file from the template and fill in values.
 cp .env.example .env.dev
 
-# 5. (Optional) Stand up the backend — see supabase/README.md.
+# 4. (Optional) Stand up the backend — see supabase/README.md.
 ```
 
 > Until `flutter gen-l10n` runs, the analyzer will report a missing

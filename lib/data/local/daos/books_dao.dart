@@ -17,6 +17,13 @@ class BooksDao extends DatabaseAccessor<AppDatabase> with _$BooksDaoMixin {
   Future<LocalBook?> getById(String id) =>
       (select(localBooks)..where((b) => b.id.equals(id))).getSingleOrNull();
 
+  /// Finds a book by content checksum (for duplicate-import detection).
+  Future<LocalBook?> getByChecksum(String checksum) =>
+      (select(localBooks)
+            ..where((b) => b.checksumSha256.equals(checksum))
+            ..limit(1))
+          .getSingleOrNull();
+
   Future<List<LocalBook>> getAll() => select(localBooks).get();
 
   Stream<List<LocalBook>> watchAll() => select(localBooks).watch();
