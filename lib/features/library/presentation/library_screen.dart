@@ -165,6 +165,39 @@ class _BookCard extends ConsumerWidget {
     return '${local.year}-${two(local.month)}-${two(local.day)}';
   }
 
+  Future<void> _onAction(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+    _CardAction action,
+  ) async {
+    final repo = ref.read(libraryRepositoryProvider);
+    if (action.isRemove) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(l10n.removeBookTitle),
+          content: Text(l10n.removeBookBody),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(l10n.dialogCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(l10n.libraryRemove),
+            ),
+          ],
+        ),
+      );
+      if (confirmed ?? false) {
+        await repo.removeBookFromLibrary(book.id);
+      }
+    } else if (action.status != null) {
+      await repo.updateBookStatus(book.id, action.status!);
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
@@ -191,25 +224,18 @@ class _BookCard extends ConsumerWidget {
         ),
         isThreeLine: true,
         onTap: () => context.push(AppRoutes.reader(book.id)),
-        trailing: PopupMenuButton<String>(
+        trailing: PopupMenuButton<_CardAction>(
           tooltip: l10n.libraryChangeStatus,
-          onSelected: (value) {
-            final repo = ref.read(libraryRepositoryProvider);
-            if (value == 'remove') {
-              repo.removeBookFromLibrary(book.id);
-            } else {
-              repo.updateBookStatus(book.id, value);
-            }
-          },
-          itemBuilder: (context) => <PopupMenuEntry<String>>[
+          onSelected: (action) => _onAction(context, ref, l10n, action),
+          itemBuilder: (context) => <PopupMenuEntry<_CardAction>>[
             for (final status in _statusTabs)
-              PopupMenuItem<String>(
-                value: status.wire,
+              PopupMenuItem<_CardAction>(
+                value: _CardAction.status(status),
                 child: Text(statusLabel(l10n, status)),
               ),
             const PopupMenuDivider(),
-            PopupMenuItem<String>(
-              value: 'remove',
+            PopupMenuItem<_CardAction>(
+              value: const _CardAction.remove(),
               child: Text(l10n.libraryRemove),
             ),
           ],
@@ -217,6 +243,17 @@ class _BookCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// A book-card menu action: either change status, or remove.
+class _CardAction {
+  const _CardAction.status(this.status) : isRemove = false;
+  const _CardAction.remove()
+      : status = null,
+        isRemove = true;
+
+  final BookShelfStatus? status;
+  final bool isRemove;
 }
 
 class _FormatBadge extends StatelessWidget {

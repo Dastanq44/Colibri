@@ -23,9 +23,10 @@ Foundational phases are landing in order:
 - ✅ **Phase 2 — Local database**: Drift/SQLite tables, DAOs, defaults, sync status, sync queue, device id service.
 - ✅ **Phase 1 — Supabase backend foundation**: SQL migrations, RLS, storage buckets, seed data, and a dev-safe Supabase client provider. Backend SQL lives in [`supabase/`](supabase/) — see [`supabase/README.md`](supabase/README.md) to apply it.
 - ✅ **Phase 3 — Auth & profile**: Supabase-backed `AuthRepository`/`ProfileRepository`, Riverpod auth/profile providers, and real Auth + Profile screens (dev-safe when no backend is configured).
-- 🚧 **Local import + My Books (local)**: pick an EPUB/TXT/PDF → validate → checksum (dedupe) → copy into app storage → create local book/shelf/progress rows → appears in My Books. No cloud upload yet.
+- ✅ **Local import + My Books (local)**: pick an EPUB/TXT/PDF → validate → checksum (dedupe) → copy into app storage → create local book/shelf/progress rows → appears in My Books. No cloud upload yet.
+- 🚧 **Normal reader MVP (TXT)**: tap a TXT book → portrait reader → tap left/right to page → progress saved locally → reopening resumes. EPUB/PDF show a friendly "coming soon"; fast mode and orientation switching are not implemented yet.
 
-There is still no reader rendering, fast mode, or sync engine — those land in later phases (see the task plan).
+There is still no fast mode, orientation switching, or sync engine — those land in later phases (see the task plan).
 
 ## First-time setup
 

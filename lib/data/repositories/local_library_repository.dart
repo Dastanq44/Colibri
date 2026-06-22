@@ -63,9 +63,12 @@ class LocalLibraryRepository implements LibraryRepository {
   }
 
   @override
-  Future<Result<void>> updateBookStatus(String bookId, String status) async {
+  Future<Result<void>> updateBookStatus(
+    String bookId,
+    BookShelfStatus status,
+  ) async {
     try {
-      await _db.bookshelfDao.setStatus(bookId, status);
+      await _db.bookshelfDao.setStatus(bookId, status.wire);
       return const Ok(null);
     } catch (e) {
       return Err(StorageFailure(e.toString()));
@@ -74,17 +77,41 @@ class LocalLibraryRepository implements LibraryRepository {
 
   @override
   Future<Result<void>> removeBookFromLibrary(String bookId) async {
+    // 1) Clean up all local DB records atomically.
     try {
-      await (_db.delete(_db.localReadingProgress)
-            ..where((p) => p.bookId.equals(bookId)))
-          .go();
-      await (_db.delete(_db.localBookshelf)..where((e) => e.bookId.equals(bookId)))
-          .go();
-      await _db.booksDao.deleteById(bookId);
-      await _storage.deleteBookStorage(bookId);
-      return const Ok(null);
+      await _db.transaction(() async {
+        await (_db.delete(_db.localReadingProgress)
+              ..where((p) => p.bookId.equals(bookId)))
+            .go();
+        await (_db.delete(_db.localBookshelf)
+              ..where((e) => e.bookId.equals(bookId)))
+            .go();
+        await (_db.delete(_db.localReadingSessions)
+              ..where((s) => s.bookId.equals(bookId)))
+            .go();
+        await (_db.delete(_db.localNotes)..where((n) => n.bookId.equals(bookId)))
+            .go();
+        await (_db.delete(_db.localBookmarks)
+              ..where((b) => b.bookId.equals(bookId)))
+            .go();
+        // Drop any queued sync ops that reference this book.
+        await (_db.delete(_db.syncQueue)
+              ..where((q) => q.entityId.equals(bookId)))
+            .go();
+        await _db.booksDao.deleteById(bookId);
+      });
     } catch (e) {
       return Err(StorageFailure(e.toString()));
     }
+
+    // 2) Best-effort file cleanup after the DB is consistent. A failure here
+    //    leaves only an orphaned file (records are already gone) — surface it
+    //    as a typed failure but do not crash.
+    try {
+      await _storage.deleteBookStorage(bookId);
+    } catch (e) {
+      return Err(StorageFailure('Removed records, but file cleanup failed: $e'));
+    }
+    return const Ok(null);
   }
 }

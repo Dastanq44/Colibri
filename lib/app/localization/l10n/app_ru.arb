@@ -82,5 +82,17 @@
   "importErrorTooLarge": "Этот файл слишком большой для импорта.",
   "importErrorMissing": "Не удалось прочитать файл.",
   "importErrorDuplicate": "Эта книга уже есть в вашей библиотеке.",
-  "importErrorGeneric": "Не удалось импортировать файл."
+  "importErrorGeneric": "Не удалось импортировать файл.",
+  "readerUnsupportedTitle": "Книга не поддерживается",
+  "readerEpubComingSoon": "Чтение EPUB пока не реализовано.",
+  "readerPdfComingSoon": "Чтение PDF пока не реализовано.",
+  "readerOpenError": "Не удалось открыть книгу.",
+  "readerEmpty": "Эта книга пуста.",
+  "readerPreviousPage": "Предыдущая страница",
+  "readerNextPage": "Следующая страница",
+  "readerModeLock": "Блокировка режима",
+  "readerMenu": "Меню читалки",
+  "removeBookTitle": "Удалить книгу?",
+  "removeBookBody": "Это удалит локальный файл и прогресс чтения с этого устройства.",
+  "dialogCancel": "Отмена"
 }

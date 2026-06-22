@@ -59,9 +59,60 @@ void main() {
   test('updateBookStatus changes the bookshelf status', () async {
     await seedBook('b1');
 
-    await repo.updateBookStatus('b1', BookShelfStatus.finished.wire);
+    await repo.updateBookStatus('b1', BookShelfStatus.finished);
 
     final books = unwrap(await repo.getMyBooks());
     expect(books.single.status, BookShelfStatus.finished);
+  });
+
+  test('removeBookFromLibrary clears all local records and the file folder',
+      () async {
+    await seedBook('b1');
+    await db.progressDao.saveProgress(
+      LocalReadingProgressCompanion.insert(bookId: 'b1', deviceId: 'dev-1'),
+    );
+    await db.notesDao.upsertNote(
+      LocalNotesCompanion.insert(
+        id: 'n1',
+        bookId: 'b1',
+        locatorType: 't',
+        locatorValue: 'v',
+        noteText: 'note',
+      ),
+    );
+    await db.notesDao.upsertBookmark(
+      LocalBookmarksCompanion.insert(
+        id: 'm1',
+        bookId: 'b1',
+        locatorType: 't',
+        locatorValue: 'v',
+      ),
+    );
+    await db.sessionsDao.startSession(
+      LocalReadingSessionsCompanion.insert(id: 's1', bookId: 'b1', mode: 'normal'),
+    );
+    await db.syncQueueDao.enqueue(
+      SyncQueueCompanion.insert(
+        id: 'q1',
+        entityType: 'book',
+        entityId: 'b1',
+        operation: 'create',
+      ),
+    );
+    final bookDir = Directory('${tmp.path}/books/b1')
+      ..createSync(recursive: true);
+    File('${bookDir.path}/b1.txt').writeAsStringSync('x');
+
+    final result = await repo.removeBookFromLibrary('b1');
+
+    expect(result, isA<Ok<void>>());
+    expect(await db.booksDao.getById('b1'), isNull);
+    expect(await db.bookshelfDao.getByBookId('b1'), isNull);
+    expect(await db.progressDao.getByBookId('b1'), isNull);
+    expect(await db.notesDao.getNotesForBook('b1'), isEmpty);
+    expect(await db.notesDao.getBookmarksForBook('b1'), isEmpty);
+    expect(await db.sessionsDao.getForBook('b1'), isEmpty);
+    expect(await db.syncQueueDao.getAll(), isEmpty);
+    expect(bookDir.existsSync(), isFalse);
   });
 }

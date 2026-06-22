@@ -114,33 +114,37 @@ class LocalImportRepository implements ImportRepository {
       final deviceId = await _deviceIdService.getOrCreate();
 
       try {
-        await _db.booksDao.upsertBook(
-          LocalBooksCompanion.insert(
-            id: bookId,
-            sourceType: 'upload',
-            format: format.wire,
-            title: meta.title,
-            fileLocalPath: localPath,
-            authorDisplay: Value(meta.authorDisplay),
-            checksumSha256: Value(checksum),
-            isFastModeSupported: Value(meta.isFastModeSupported),
-            textReadyStatus: Value(meta.textReadyStatus),
-          ),
-        );
-        await _db.bookshelfDao.upsertEntry(
-          LocalBookshelfCompanion.insert(
-            bookId: bookId,
-            status: BookShelfStatus.reading.wire,
-          ),
-        );
-        await _db.progressDao.saveProgress(
-          LocalReadingProgressCompanion.insert(
-            bookId: bookId,
-            deviceId: deviceId,
-          ),
-        );
+        // All three local writes succeed or none do.
+        await _db.transaction(() async {
+          await _db.booksDao.upsertBook(
+            LocalBooksCompanion.insert(
+              id: bookId,
+              sourceType: 'upload',
+              format: format.wire,
+              title: meta.title,
+              fileLocalPath: localPath,
+              authorDisplay: Value(meta.authorDisplay),
+              checksumSha256: Value(checksum),
+              isFastModeSupported: Value(meta.isFastModeSupported),
+              textReadyStatus: Value(meta.textReadyStatus),
+            ),
+          );
+          await _db.bookshelfDao.upsertEntry(
+            LocalBookshelfCompanion.insert(
+              bookId: bookId,
+              status: BookShelfStatus.reading.wire,
+            ),
+          );
+          await _db.progressDao.saveProgress(
+            LocalReadingProgressCompanion.insert(
+              bookId: bookId,
+              deviceId: deviceId,
+            ),
+          );
+        });
       } catch (e) {
-        // Roll back the copied file so a failed import leaves no orphan.
+        // Transaction rolled back; remove the copied file so a failed import
+        // leaves no orphan.
         await _storage.deleteBookStorage(bookId);
         return Err(StorageFailure('Could not save the book (${e.runtimeType}).'));
       }

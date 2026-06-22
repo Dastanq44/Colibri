@@ -1,10 +1,18 @@
 import '../../core/result/result.dart';
+import '../../features/reader/domain/reader_document.dart';
+import '../../features/reader/domain/reader_locator.dart';
 
-/// Boundary for loading readable book content for the reader engine.
-/// Implemented in Phase 7. The reader engine itself never touches data
-/// sources directly — it goes through this repository.
+/// Boundary for loading readable book content and persisting reading position.
+/// The reader engine/UI goes through this — never the file system or Drift.
 abstract interface class ReaderRepository {
-  Future<Result<void>> openBook(String bookId);
+  /// Loads a book into a format-agnostic [ReaderDocument]. Returns a typed
+  /// failure for unsupported formats or missing files. Also stamps the book's
+  /// `lastOpenedAt`.
+  Future<Result<ReaderDocument>> openBook(String bookId);
 
-  // TODO(phase7): return a BookDocument (chapters/text) domain model.
+  /// The last saved position for a book, or `null` if none.
+  Future<Result<ReaderLocator?>> getSavedLocator(String bookId);
+
+  /// Persists the current reading position locally.
+  Future<Result<void>> saveLocator(String bookId, ReaderLocator locator);
 }

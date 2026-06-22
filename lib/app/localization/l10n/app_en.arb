@@ -103,5 +103,17 @@
   "importErrorTooLarge": "This file is too large to import.",
   "importErrorMissing": "The file could not be read.",
   "importErrorDuplicate": "This book is already in your library.",
-  "importErrorGeneric": "Could not import this file."
+  "importErrorGeneric": "Could not import this file.",
+  "readerUnsupportedTitle": "Unsupported book",
+  "readerEpubComingSoon": "EPUB reader is not implemented yet.",
+  "readerPdfComingSoon": "PDF reader is not implemented yet.",
+  "readerOpenError": "Could not open this book.",
+  "readerEmpty": "This book is empty.",
+  "readerPreviousPage": "Previous page",
+  "readerNextPage": "Next page",
+  "readerModeLock": "Mode lock",
+  "readerMenu": "Reader menu",
+  "removeBookTitle": "Remove book?",
+  "removeBookBody": "This removes the local file and reading progress from this device.",
+  "dialogCancel": "Cancel"
 }
