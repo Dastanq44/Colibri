@@ -1,6 +1,8 @@
 import 'package:colibri/data/local/app_database.dart';
 import 'package:colibri/data/local/sync_status.dart';
-import 'package:drift/drift.dart';
+// Only `Value` is needed here; importing all of drift would clash with
+// flutter_test matchers (e.g. isNotNull).
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 

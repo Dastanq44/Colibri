@@ -9,6 +9,11 @@ import 'daos/progress_dao.dart';
 import 'daos/sessions_dao.dart';
 import 'daos/settings_dao.dart';
 import 'daos/sync_queue_dao.dart';
+// Imported directly (not just transitively via the table files) so the symbols
+// the generated part references — SyncStatus(Converter) and dbNow — are in the
+// database library's scope.
+import 'db_time.dart';
+import 'sync_status.dart';
 import 'tables/annotation_tables.dart';
 import 'tables/book_tables.dart';
 import 'tables/reading_tables.dart';

@@ -1,5 +1,6 @@
 import 'package:colibri/data/local/app_database.dart';
-import 'package:drift/drift.dart';
+// Only `Value` is needed here; avoid clashing with flutter_test matchers.
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 

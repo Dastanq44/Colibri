@@ -15,6 +15,10 @@ Future<SupabaseClient?> initSupabase(AppConfig config) async {
 
   await Supabase.initialize(
     url: config.supabaseUrl,
+    // `anonKey` is the documented anon/publishable key. supabase_flutter has
+    // begun renaming this to `publishableKey`; keep the anon-key flow for now
+    // and migrate when we adopt Supabase's new API-key naming.
+    // ignore: deprecated_member_use
     anonKey: config.supabaseAnonKey,
     debug: !config.environment.isProduction,
   );

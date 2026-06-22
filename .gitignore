@@ -7,6 +7,12 @@
 .pub/
 build/
 
+# Generated code — produced by `dart run build_runner build` and
+# `flutter gen-l10n`. Run those after `flutter pub get` (see README).
+*.g.dart
+*.freezed.dart
+lib/app/localization/generated/app_localizations*.dart
+
 # Android
 android/.gradle/
 android/local.properties
