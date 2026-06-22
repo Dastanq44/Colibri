@@ -1,9 +1,11 @@
 -- Phase 1 — TASK-0104
 -- Storage buckets and their access policies.
 --
--- Path convention: private/per-user objects live under a folder named after
--- the owner's user id, e.g. `book-files-private/<user_id>/<book_id>.epub`.
--- Policies enforce that the first path segment equals auth.uid().
+-- Path convention: the bucket is chosen via bucket_id and is NOT part of the
+-- object name. An object's `name` is the path inside the bucket and must start
+-- with the owner's user id, e.g. bucket_id = 'book-files-private' with object
+-- name `<user_id>/<book_id>.epub`. Policies enforce that the first segment of
+-- the object name equals auth.uid().
 
 insert into storage.buckets (id, name, public)
 values

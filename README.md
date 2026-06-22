@@ -21,9 +21,10 @@ Foundational phases are landing in order:
 
 - ✅ **Phase 0 — Project foundation**: routing, placeholder screens, theme, localization, env config, repository interfaces.
 - ✅ **Phase 2 — Local database**: Drift/SQLite tables, DAOs, defaults, sync status, sync queue, device id service.
-- 🚧 **Phase 1 — Supabase backend foundation**: SQL migrations, RLS, storage buckets, seed data, and a dev-safe Supabase client provider. Backend SQL lives in [`supabase/`](supabase/) — see [`supabase/README.md`](supabase/README.md) to apply it.
+- ✅ **Phase 1 — Supabase backend foundation**: SQL migrations, RLS, storage buckets, seed data, and a dev-safe Supabase client provider. Backend SQL lives in [`supabase/`](supabase/) — see [`supabase/README.md`](supabase/README.md) to apply it.
+- 🚧 **Phase 3 — Auth & profile**: Supabase-backed `AuthRepository`/`ProfileRepository`, Riverpod auth/profile providers, and real Auth + Profile screens (dev-safe when no backend is configured).
 
-There is still no auth UI, import, reader, sync engine, or fast-mode logic — those land in later phases (see the task plan).
+There is still no import, reader, sync engine, or fast-mode logic — those land in later phases (see the task plan).
 
 ## First-time setup
 
@@ -121,6 +122,6 @@ supabase/                   # migrations, seed.sql, policies (Phase 1)
 
 ## Next task
 
-Apply the backend (see [`supabase/README.md`](supabase/README.md)), then
-**Phase 3 — Auth & profile** (TASK-0301..0305): build auth UI and implement
-`AuthRepository`/`ProfileRepository` on top of Supabase Auth.
+**Phase 4 — App shell & static screens** (TASK-0401..0406): bottom-tab
+navigation polish and the Home / Catalog / My Books / Book Detail / Settings
+UIs (still mock data; real data lands in Phase 5).

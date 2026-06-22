@@ -34,3 +34,9 @@ final class ValidationFailure extends Failure {
 final class StorageFailure extends Failure {
   const StorageFailure([super.message = 'Storage error.']);
 }
+
+/// Returned when an operation needs the backend (Supabase) but it is not
+/// configured for this build — e.g. running in dev without keys.
+final class BackendUnavailableFailure extends Failure {
+  const BackendUnavailableFailure([super.message = 'Backend is not configured.']);
+}

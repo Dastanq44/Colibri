@@ -75,14 +75,20 @@ Open **SQL Editor** in the dashboard and run the files in
 
 The buckets are created by `..._storage.sql`:
 
-| Bucket               | Public | Who can write                                  |
-| -------------------- | ------ | ---------------------------------------------- |
-| `book-files-private` | no     | owner only, under `book-files-private/<uid>/…` |
-| `book-covers-public` | yes    | owner under `<uid>/…`; catalog via service role |
-| `avatars-public`     | yes    | owner under `avatars-public/<uid>/…`           |
+| Bucket               | Public | Who can write                          |
+| -------------------- | ------ | -------------------------------------- |
+| `book-files-private` | no     | owner only (object name `<uid>/…`)     |
+| `book-covers-public` | yes    | owner (`<uid>/…`); catalog via service role |
+| `avatars-public`     | yes    | owner only (object name `<uid>/…`)     |
 
-Private downloads use signed URLs; public buckets are readable by URL. The
-first path segment must equal the user's id for private/per-user writes.
+The bucket is selected separately via `bucket_id`; it is **not** part of the
+object name. An object's `storage.objects.name` is the path *inside* the
+bucket and must start with `<user_id>/…` (e.g. an object named
+`<user_id>/<book_id>.epub` in the `book-files-private` bucket). Policies
+enforce this with `(storage.foldername(name))[1] = auth.uid()::text`, i.e. the
+first path segment of the object name must equal the user's id.
+
+Private downloads use signed URLs; public buckets are readable by URL.
 
 ## Security notes
 
