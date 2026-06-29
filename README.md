@@ -24,9 +24,10 @@ Foundational phases are landing in order:
 - ✅ **Phase 1 — Supabase backend foundation**: SQL migrations, RLS, storage buckets, seed data, and a dev-safe Supabase client provider. Backend SQL lives in [`supabase/`](supabase/) — see [`supabase/README.md`](supabase/README.md) to apply it.
 - ✅ **Phase 3 — Auth & profile**: Supabase-backed `AuthRepository`/`ProfileRepository`, Riverpod auth/profile providers, and real Auth + Profile screens (dev-safe when no backend is configured).
 - ✅ **Local import + My Books (local)**: pick an EPUB/TXT/PDF → validate → checksum (dedupe) → copy into app storage → create local book/shelf/progress rows → appears in My Books. No cloud upload yet.
-- 🚧 **Normal reader MVP (TXT)**: tap a TXT book → portrait reader → tap left/right to page → progress saved locally → reopening resumes. EPUB/PDF show a friendly "coming soon"; fast mode and orientation switching are not implemented yet.
+- ✅ **Normal reader MVP (TXT)**: tap a TXT book → portrait reader → tap left/right to page → progress saved locally → reopening resumes. EPUB/PDF show a friendly "coming soon".
+- 🚧 **Fast mode (TXT)**: rotate the reader to landscape for RSVP-style fast reading — centered word, tap left/center/right to slow/pause/speed up, WPM 150–700 (step 25), with position carried across normal ↔ fast. Orientation only switches mode *inside the reader* (no global lock).
 
-There is still no fast mode, orientation switching, or sync engine — those land in later phases (see the task plan).
+There is still no EPUB/PDF rendering or sync engine — those land in later phases (see the task plan).
 
 ## First-time setup
 
@@ -122,6 +123,6 @@ supabase/                   # migrations, seed.sql, policies (Phase 1)
 
 ## Next task
 
-**Phase 4 — App shell & static screens** (TASK-0401..0406): bottom-tab
-navigation polish and the Home / Catalog / My Books / Book Detail / Settings
-UIs (still mock data; real data lands in Phase 5).
+**Reader hardening + EPUB text extraction MVP**: better TXT pagination, basic
+EPUB text extraction, a table-of-contents placeholder, reader settings
+integration, improved progress mapping, and more Android real-device testing.

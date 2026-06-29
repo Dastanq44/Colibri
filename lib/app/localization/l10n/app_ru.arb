@@ -94,5 +94,15 @@
   "readerMenu": "Меню читалки",
   "removeBookTitle": "Удалить книгу?",
   "removeBookBody": "Это удалит локальный файл и прогресс чтения с этого устройства.",
-  "dialogCancel": "Отмена"
+  "dialogCancel": "Отмена",
+  "wpm": "слов/мин",
+  "fastPlay": "Играть",
+  "fastPause": "Пауза",
+  "fastPaused": "Пауза",
+  "fastIncreaseSpeed": "Увеличить скорость",
+  "fastDecreaseSpeed": "Уменьшить скорость",
+  "fastSpeedLocked": "Скорость заблокирована",
+  "fastModeLocked": "Режим заблокирован",
+  "fastUnavailable": "Быстрый режим недоступен для этой книги.",
+  "fastNoText": "Нет текста для быстрого чтения."
 }

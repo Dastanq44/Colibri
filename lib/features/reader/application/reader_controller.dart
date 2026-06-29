@@ -131,6 +131,27 @@ class ReaderController extends FamilyNotifier<ReaderState, String> {
   /// Saves the current position (also called on reader exit/pause).
   Future<void> saveNow() => _persist();
 
+  /// Source start offset of the current page (for handing off to fast mode).
+  int? get currentStartOffset {
+    final s = state;
+    return s is ReaderReady ? s.currentPage.startOffset : null;
+  }
+
+  /// Jumps to the page containing [offset] (used to resume the normal reader
+  /// from a fast-mode position).
+  void jumpToOffset(int offset) {
+    final s = state;
+    if (s is! ReaderReady) return;
+    var index = s.pages.indexWhere(
+      (p) => offset >= p.startOffset && offset < p.endOffset,
+    );
+    if (index < 0) index = offset <= 0 ? 0 : s.pages.length - 1;
+    if (index != s.pageIndex) {
+      state = s.copyWith(pageIndex: index);
+      _persist();
+    }
+  }
+
   Future<void> _persist() async {
     final s = state;
     if (s is! ReaderReady) return;

@@ -99,7 +99,11 @@ class LocalReaderRepository implements ReaderRepository {
   }
 
   @override
-  Future<Result<void>> saveLocator(String bookId, ReaderLocator locator) async {
+  Future<Result<void>> saveLocator(
+    String bookId,
+    ReaderLocator locator, {
+    ReaderMode mode = ReaderMode.normal,
+  }) async {
     try {
       final deviceId = await _deviceIdService.getOrCreate();
       final existing = await _db.progressDao.getByBookId(bookId);
@@ -113,8 +117,10 @@ class LocalReaderRepository implements ReaderRepository {
           locatorValue: Value(locator.locatorValue),
           chapterIndex: Value(locator.chapterIndex),
           pageNumber: Value(locator.pageNumber),
+          paragraphIndex: Value(locator.paragraphIndex),
+          tokenIndex: Value(locator.tokenIndex),
           percent: Value(locator.percent),
-          mode: Value(ReaderMode.normal.wire),
+          mode: Value(mode.wire),
           revision: Value(nextRevision),
           updatedAt: Value(_nowIso()),
           syncStatus: const Value(SyncStatus.pendingUpdate),

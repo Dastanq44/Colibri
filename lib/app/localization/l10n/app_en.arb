@@ -115,5 +115,15 @@
   "readerMenu": "Reader menu",
   "removeBookTitle": "Remove book?",
   "removeBookBody": "This removes the local file and reading progress from this device.",
-  "dialogCancel": "Cancel"
+  "dialogCancel": "Cancel",
+  "wpm": "WPM",
+  "fastPlay": "Play",
+  "fastPause": "Pause",
+  "fastPaused": "Paused",
+  "fastIncreaseSpeed": "Increase speed",
+  "fastDecreaseSpeed": "Decrease speed",
+  "fastSpeedLocked": "Speed locked",
+  "fastModeLocked": "Mode locked",
+  "fastUnavailable": "Fast mode is unavailable for this book.",
+  "fastNoText": "No readable text for fast mode."
 }

@@ -1,13 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../core/constants/app_constants.dart';
 import '../application/reader_controller.dart';
+import '../domain/reader_mode.dart';
 import '../domain/reader_progress.dart';
+import '../fast_mode/application/fast_mode_providers.dart';
+import '../fast_mode/presentation/fast_reader_view.dart';
 
-/// Portrait normal reader. TXT books render with tap-left/tap-right paging and
-/// a bottom progress bar; unsupported formats show a friendly message.
+/// The reader. Portrait = normal paged TXT reader; landscape = fast mode (TXT
+/// only). Orientation only switches the mode *inside this screen* — the app is
+/// never globally orientation-locked. Mode lock freezes the current mode.
 class ReaderScreen extends ConsumerStatefulWidget {
   const ReaderScreen({super.key, required this.bookId});
 
@@ -19,6 +26,12 @@ class ReaderScreen extends ConsumerStatefulWidget {
 
 class _ReaderScreenState extends ConsumerState<ReaderScreen>
     with WidgetsBindingObserver {
+  ReaderMode _effectiveMode = ReaderMode.normal;
+  ReaderMode? _pendingMode;
+  Timer? _switchTimer;
+  // TODO(reader-settings): persist mode lock to local_reader_settings.
+  bool _modeLocked = false;
+
   @override
   void initState() {
     super.initState();
@@ -27,6 +40,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
 
   @override
   void dispose() {
+    _switchTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -36,15 +50,73 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       ref.read(readerControllerProvider(widget.bookId).notifier).saveNow();
+      ref.read(fastModeEngineProvider(widget.bookId)).savePosition();
     }
+  }
+
+  /// Debounced orientation → mode switch (stability threshold avoids flips).
+  void _scheduleModeSwitch(Orientation orientation) {
+    if (_modeLocked) return;
+    final desired = orientation == Orientation.landscape
+        ? ReaderMode.fast
+        : ReaderMode.normal;
+    if (desired == _effectiveMode) {
+      _switchTimer?.cancel();
+      _pendingMode = null;
+      return;
+    }
+    if (_pendingMode == desired) return;
+    _pendingMode = desired;
+    _switchTimer?.cancel();
+    _switchTimer = Timer(AppConstants.modeSwitchStabilityThreshold, () {
+      if (!mounted) return;
+      _commitModeSwitch(desired);
+    });
+  }
+
+  void _commitModeSwitch(ReaderMode to) {
+    _handoffPosition(to);
+    setState(() {
+      _effectiveMode = to;
+      _pendingMode = null;
+    });
+  }
+
+  /// Carries the current text position across the mode boundary so reading
+  /// continues from the same place.
+  void _handoffPosition(ReaderMode to) {
+    final reader = ref.read(readerControllerProvider(widget.bookId).notifier);
+    final engine = ref.read(fastModeEngineProvider(widget.bookId));
+    if (to == ReaderMode.fast) {
+      final offset = reader.currentStartOffset;
+      if (offset != null) engine.seekToOffset(offset);
+      engine.pause(); // fast mode starts paused
+    } else {
+      engine.pause();
+      final offset = engine.currentStartOffset;
+      if (offset != null) reader.jumpToOffset(offset);
+    }
+  }
+
+  void _toggleModeLock() {
+    setState(() {
+      _modeLocked = !_modeLocked;
+      if (_modeLocked) {
+        _switchTimer?.cancel();
+        _pendingMode = null;
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final state = ref.watch(readerControllerProvider(widget.bookId));
-    final controller =
-        ref.read(readerControllerProvider(widget.bookId).notifier);
+
+    // Fast mode only applies to a successfully loaded (TXT) book.
+    if (state is ReaderReady) {
+      _scheduleModeSwitch(MediaQuery.orientationOf(context));
+    }
 
     return switch (state) {
       ReaderLoading() => _Scaffold(
@@ -64,17 +136,26 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
         ),
       ReaderFailed() => _Scaffold(
           title: l10n.readerTitle,
-          child: _Message(
-            icon: Icons.error_outline,
-            text: l10n.readerOpenError,
-          ),
+          child: _Message(icon: Icons.error_outline, text: l10n.readerOpenError),
         ),
-      ReaderReady() => _ReaderView(
-          l10n: l10n,
-          state: state,
-          onPrevious: controller.previousPage,
-          onNext: controller.nextPage,
-        ),
+      ReaderReady() => _effectiveMode == ReaderMode.fast
+          ? FastReaderView(
+              bookId: widget.bookId,
+              modeLocked: _modeLocked,
+              onToggleModeLock: _toggleModeLock,
+            )
+          : _NormalReaderView(
+              l10n: l10n,
+              state: state,
+              modeLocked: _modeLocked,
+              onToggleModeLock: _toggleModeLock,
+              onPrevious: ref
+                  .read(readerControllerProvider(widget.bookId).notifier)
+                  .previousPage,
+              onNext: ref
+                  .read(readerControllerProvider(widget.bookId).notifier)
+                  .nextPage,
+            ),
     };
   }
 
@@ -122,16 +203,20 @@ class _Message extends StatelessWidget {
   }
 }
 
-class _ReaderView extends StatelessWidget {
-  const _ReaderView({
+class _NormalReaderView extends StatelessWidget {
+  const _NormalReaderView({
     required this.l10n,
     required this.state,
+    required this.modeLocked,
+    required this.onToggleModeLock,
     required this.onPrevious,
     required this.onNext,
   });
 
   final AppLocalizations l10n;
   final ReaderReady state;
+  final bool modeLocked;
+  final VoidCallback onToggleModeLock;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
 
@@ -142,66 +227,65 @@ class _ReaderView extends StatelessWidget {
       body: Column(
         children: <Widget>[
           Expanded(
-            child: Stack(
-              children: <Widget>[
-                Positioned.fill(
-                  child: SingleChildScrollView(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    child: Text(
-                      state.currentPage.text.trim(),
-                      style: const TextStyle(
-                        fontSize: AppConstants.readerFontSizeDefault,
-                        height: AppConstants.readerLineHeightDefault,
+            // One gesture detector handles paging by tap half; vertical drags
+            // still scroll the text below.
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Semantics(
+                  customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
+                    CustomSemanticsAction(label: l10n.readerPreviousPage):
+                        onPrevious,
+                    CustomSemanticsAction(label: l10n.readerNextPage): onNext,
+                  },
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTapUp: (details) {
+                      if (details.localPosition.dx < constraints.maxWidth / 2) {
+                        onPrevious();
+                      } else {
+                        onNext();
+                      }
+                    },
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 16),
+                      child: Text(
+                        state.currentPage.text.trim(),
+                        style: const TextStyle(
+                          fontSize: AppConstants.readerFontSizeDefault,
+                          height: AppConstants.readerLineHeightDefault,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                // Transparent tap zones over the text: left = previous, right =
-                // next. Translucent so vertical drags still scroll the text.
-                Positioned.fill(
-                  child: Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: Semantics(
-                          label: l10n.readerPreviousPage,
-                          button: true,
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.translucent,
-                            onTap: onPrevious,
-                            child: const SizedBox.expand(),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Semantics(
-                          label: l10n.readerNextPage,
-                          button: true,
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.translucent,
-                            onTap: onNext,
-                            child: const SizedBox.expand(),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                );
+              },
             ),
           ),
-          _BottomBar(l10n: l10n, progress: state.progress),
+          _NormalBottomBar(
+            l10n: l10n,
+            progress: state.progress,
+            modeLocked: modeLocked,
+            onToggleModeLock: onToggleModeLock,
+          ),
         ],
       ),
     );
   }
 }
 
-class _BottomBar extends StatelessWidget {
-  const _BottomBar({required this.l10n, required this.progress});
+class _NormalBottomBar extends StatelessWidget {
+  const _NormalBottomBar({
+    required this.l10n,
+    required this.progress,
+    required this.modeLocked,
+    required this.onToggleModeLock,
+  });
 
   final AppLocalizations l10n;
   final ReaderProgress progress;
+  final bool modeLocked;
+  final VoidCallback onToggleModeLock;
 
   void _comingSoon(BuildContext context) {
     ScaffoldMessenger.of(context)
@@ -220,8 +304,8 @@ class _BottomBar extends StatelessWidget {
           children: <Widget>[
             IconButton(
               tooltip: l10n.readerModeLock,
-              icon: const Icon(Icons.lock_open_outlined),
-              onPressed: () => _comingSoon(context),
+              icon: Icon(modeLocked ? Icons.lock : Icons.lock_open_outlined),
+              onPressed: onToggleModeLock,
             ),
             Expanded(
               child: Column(
@@ -231,10 +315,8 @@ class _BottomBar extends StatelessWidget {
                     value: (progress.percent / 100).clamp(0.0, 1.0),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    '${progress.percent.round()}%',
-                    style: theme.textTheme.bodySmall,
-                  ),
+                  Text('${progress.percent.round()}%',
+                      style: theme.textTheme.bodySmall),
                 ],
               ),
             ),

@@ -7,6 +7,7 @@ import 'package:colibri/data/local/app_database.dart';
 import 'package:colibri/data/repositories/local_reader_repository.dart';
 import 'package:colibri/features/reader/domain/reader_document.dart';
 import 'package:colibri/features/reader/domain/reader_locator.dart';
+import 'package:colibri/features/reader/domain/reader_mode.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -104,5 +105,31 @@ void main() {
     expect(saved, isNotNull);
     expect(saved!.pageNumber, 0);
     expect(saved.locatorType, 'txt_offset');
+  });
+
+  test('saves fast-mode position with token + paragraph data', () async {
+    await seedBook('b1', format: 'txt', content: 'hello world');
+
+    await repo.saveLocator(
+      'b1',
+      const ReaderLocator(
+        locatorType: 'txt_offset',
+        locatorValue: '42',
+        paragraphIndex: 3,
+        tokenIndex: 7,
+        percent: 12.5,
+      ),
+      mode: ReaderMode.fast,
+    );
+
+    final saved = switch (await repo.getSavedLocator('b1')) {
+      Ok(value: final l) => l,
+      Err() => null,
+    };
+
+    expect(saved, isNotNull);
+    expect(saved!.tokenIndex, 7);
+    expect(saved.paragraphIndex, 3);
+    expect(saved.locatorValue, '42');
   });
 }
