@@ -17,4 +17,17 @@ class ReaderDocument {
 
   /// Whole-book text (chapters joined). For TXT this is the single chapter.
   String get fullText => chapters.map((c) => c.text).join('\n\n');
+
+  /// Start offset of each chapter within [fullText] (chapters are joined by a
+  /// 2-char `\n\n` separator). Used to map a TOC entry to a page.
+  List<int> chapterStartOffsets() {
+    final offsets = <int>[];
+    var acc = 0;
+    for (var i = 0; i < chapters.length; i++) {
+      offsets.add(acc);
+      acc += chapters[i].text.length;
+      if (i < chapters.length - 1) acc += 2; // the '\n\n' join
+    }
+    return offsets;
+  }
 }

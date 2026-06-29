@@ -24,10 +24,11 @@ Foundational phases are landing in order:
 - ✅ **Phase 1 — Supabase backend foundation**: SQL migrations, RLS, storage buckets, seed data, and a dev-safe Supabase client provider. Backend SQL lives in [`supabase/`](supabase/) — see [`supabase/README.md`](supabase/README.md) to apply it.
 - ✅ **Phase 3 — Auth & profile**: Supabase-backed `AuthRepository`/`ProfileRepository`, Riverpod auth/profile providers, and real Auth + Profile screens (dev-safe when no backend is configured).
 - ✅ **Local import + My Books (local)**: pick an EPUB/TXT/PDF → validate → checksum (dedupe) → copy into app storage → create local book/shelf/progress rows → appears in My Books. No cloud upload yet.
-- ✅ **Normal reader MVP (TXT)**: tap a TXT book → portrait reader → tap left/right to page → progress saved locally → reopening resumes. EPUB/PDF show a friendly "coming soon".
-- 🚧 **Fast mode (TXT)**: rotate the reader to landscape for RSVP-style fast reading — centered word, tap left/center/right to slow/pause/speed up, WPM 150–700 (step 25), with position carried across normal ↔ fast. Orientation only switches mode *inside the reader* (no global lock).
+- ✅ **Normal reader (TXT + EPUB)**: tap a book → portrait reader → tap left/right to page → progress saved locally → reopening resumes. EPUB text is extracted (ZIP/OPF/XHTML) into chapters. PDF shows a friendly "coming later".
+- ✅ **Fast mode (TXT + EPUB)**: rotate the reader to landscape for RSVP-style fast reading — centered word, tap left/center/right to slow/pause/speed up, with position carried across normal ↔ fast. Orientation only switches mode *inside the reader* (no global lock).
+- ✅ **Reader settings (persisted)**: theme (light/sepia/dark), font size, line height, letter spacing, mode lock, speed lock, default WPM, show-adjacent — all in `local_reader_settings`/`local_fast_settings` and applied live to both modes. Reader menu has a table of contents.
 
-There is still no EPUB/PDF rendering or sync engine — those land in later phases (see the task plan).
+There is still no PDF rendering or cloud sync — those land in later phases (see the task plan).
 
 ## First-time setup
 
@@ -121,8 +122,37 @@ supabase/                   # migrations, seed.sql, policies (Phase 1)
 | `SENTRY_DSN`        | no       | Phase 15 | crash reporting                |
 | `ANALYTICS_ENABLED` | no       | Phase 15 | keep `false` in dev            |
 
+## Android pre-iOS testing checklist
+
+iOS/Xcode testing is deferred; validate on Android first. Manual smoke test:
+
+1. Import TXT.
+2. Open TXT in reader.
+3. Change reader font size/theme.
+4. Rotate to landscape.
+5. Use fast mode.
+6. Pause/play.
+7. Increase/decrease WPM.
+8. Enable mode lock.
+9. Enable speed lock.
+10. Background and resume app.
+11. Reopen book and confirm progress.
+12. Import EPUB.
+13. Open EPUB extracted text.
+14. Use fast mode on EPUB.
+15. Try a malformed/unsupported file (PDF, broken EPUB).
+
+iOS-specific checks still required later (need a Mac + Xcode):
+
+- file picker behavior
+- local storage paths
+- safe areas/notch
+- haptics
+- orientation behavior on a real iPhone
+- TestFlight signing/build
+
 ## Next task
 
-**Reader hardening + EPUB text extraction MVP**: better TXT pagination, basic
-EPUB text extraction, a table-of-contents placeholder, reader settings
-integration, improved progress mapping, and more Android real-device testing.
+**Android device hardening + local sync preparation**: rotation on real
+Android, import/background-resume edge cases, then the sync queue processor and
+Supabase upload for imported files — iOS/Xcode/TestFlight after that.

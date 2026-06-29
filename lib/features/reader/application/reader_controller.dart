@@ -6,9 +6,10 @@ import '../domain/reader_document.dart';
 import '../domain/reader_locator.dart';
 import '../domain/reader_page.dart';
 import '../domain/reader_progress.dart';
+import '../domain/toc_entry.dart';
 import 'reader_providers.dart';
 
-enum ReaderUnsupportedReason { epub, pdf, generic }
+enum ReaderUnsupportedReason { pdf, malformedEpub, emptyText, generic }
 
 /// State machine for the portrait TXT reader.
 sealed class ReaderState {
@@ -37,11 +38,13 @@ class ReaderReady extends ReaderState {
     required this.document,
     required this.pages,
     required this.pageIndex,
+    required this.toc,
   });
 
   final ReaderDocument document;
   final List<ReaderPage> pages;
   final int pageIndex;
+  final List<TocEntry> toc;
 
   ReaderPage get currentPage => pages[pageIndex];
 
@@ -57,6 +60,7 @@ class ReaderReady extends ReaderState {
         document: document,
         pages: pages,
         pageIndex: pageIndex ?? this.pageIndex,
+        toc: toc,
       );
 }
 
@@ -86,22 +90,37 @@ class ReaderController extends FamilyNotifier<ReaderState, String> {
             case Ok(value: final ReaderLocator loc)) {
           index = _resolveIndex(pages, loc);
         }
-        state = ReaderReady(document: doc, pages: pages, pageIndex: index);
+        state = ReaderReady(
+          document: doc,
+          pages: pages,
+          pageIndex: index,
+          toc: _buildToc(doc),
+        );
     }
   }
 
+  List<TocEntry> _buildToc(ReaderDocument doc) {
+    final offsets = doc.chapterStartOffsets();
+    return <TocEntry>[
+      for (var i = 0; i < doc.chapters.length; i++)
+        TocEntry(
+          title: doc.chapters[i].title,
+          chapterIndex: i,
+          startOffset: offsets[i],
+        ),
+    ];
+  }
+
   ReaderState _mapFailure(Failure failure) {
-    if (failure is UnsupportedFormatFailure) {
-      final m = failure.message.toUpperCase();
-      if (m.contains('EPUB')) {
-        return const ReaderUnsupported(ReaderUnsupportedReason.epub);
-      }
-      if (m.contains('PDF')) {
-        return const ReaderUnsupported(ReaderUnsupportedReason.pdf);
-      }
-      return const ReaderUnsupported(ReaderUnsupportedReason.generic);
-    }
-    return const ReaderFailed();
+    return switch (failure) {
+      UnsupportedFormatFailure() =>
+        const ReaderUnsupported(ReaderUnsupportedReason.pdf),
+      MalformedBookFailure() =>
+        const ReaderUnsupported(ReaderUnsupportedReason.malformedEpub),
+      EmptyBookFailure() =>
+        const ReaderUnsupported(ReaderUnsupportedReason.emptyText),
+      _ => const ReaderFailed(),
+    };
   }
 
   int _resolveIndex(List<ReaderPage> pages, ReaderLocator locator) {
@@ -151,6 +170,9 @@ class ReaderController extends FamilyNotifier<ReaderState, String> {
       _persist();
     }
   }
+
+  /// Jumps to a table-of-contents entry's chapter and saves progress.
+  void jumpToChapter(TocEntry entry) => jumpToOffset(entry.startOffset);
 
   Future<void> _persist() async {
     final s = state;

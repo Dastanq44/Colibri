@@ -66,3 +66,13 @@ final class FileMissingFailure extends Failure {
 final class DuplicateFailure extends Failure {
   const DuplicateFailure([super.message = 'Already imported.']);
 }
+
+/// A book file could not be parsed (e.g. malformed EPUB).
+final class MalformedBookFailure extends Failure {
+  const MalformedBookFailure([super.message = 'Could not read this book.']);
+}
+
+/// A book opened but contained no readable text.
+final class EmptyBookFailure extends Failure {
+  const EmptyBookFailure([super.message = 'No readable text was found.']);
+}

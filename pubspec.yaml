@@ -39,6 +39,11 @@ dependencies:
   # SHA-256 checksums for import duplicate detection.
   crypto: ^3.0.3
 
+  # EPUB text extraction (ZIP + XML/OPF + XHTML).
+  archive: ^3.6.1
+  xml: ^6.5.0
+  html: ^0.15.4
+
   # Crash reporting (initialized in Phase 15).
   sentry_flutter: ^8.3.0
 

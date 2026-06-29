@@ -5,7 +5,20 @@ import 'package:flutter/material.dart';
 /// These are intentionally separate from the app-chrome [ThemeData]: the
 /// reading area has its own background/text treatment for comfort, while the
 /// surrounding navigation follows the normal light/dark app theme.
-enum ReaderThemeVariant { light, sepia, dark }
+enum ReaderThemeVariant {
+  light,
+  sepia,
+  dark;
+
+  /// Stored value (matches the `theme` settings column). Same as [name].
+  String get wire => name;
+
+  static ReaderThemeVariant fromWire(String value) =>
+      ReaderThemeVariant.values.firstWhere(
+        (v) => v.name == value,
+        orElse: () => ReaderThemeVariant.light,
+      );
+}
 
 /// Color palette for a reading surface.
 class ReaderPalette {

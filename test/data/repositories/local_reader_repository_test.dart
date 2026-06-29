@@ -67,10 +67,10 @@ void main() {
     expect((result as Err).failure, isA<UnsupportedFormatFailure>());
   });
 
-  test('returns unsupported for EPUB', () async {
-    await seedBook('e1', format: 'epub', content: 'PK');
+  test('returns malformed failure for an invalid EPUB', () async {
+    await seedBook('e1', format: 'epub', content: 'not a real zip');
     final result = await repo.openBook('e1');
-    expect((result as Err).failure, isA<UnsupportedFormatFailure>());
+    expect((result as Err).failure, isA<MalformedBookFailure>());
   });
 
   test('returns not found for a missing book', () async {

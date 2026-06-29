@@ -7,6 +7,7 @@ import 'package:colibri/features/reader/domain/reader_document.dart';
 import 'package:colibri/features/reader/domain/reader_locator.dart';
 import 'package:colibri/features/reader/domain/reader_mode.dart';
 import 'package:colibri/features/reader/domain/reader_page.dart';
+import 'package:colibri/features/reader/domain/toc_entry.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -52,6 +53,7 @@ ReaderReady _ready(int pageIndex, int count) => ReaderReady(
         ),
       ),
       pageIndex: pageIndex,
+      toc: const <TocEntry>[],
     );
 
 Future<ReaderReady> _pumpReady(ProviderContainer c, String id) async {
@@ -143,6 +145,54 @@ void main() {
         (c.read(readerControllerProvider('b')) as ReaderReady).pageIndex,
         last,
       );
+    });
+  });
+
+  group('ReaderController TOC', () {
+    ProviderContainer multiChapter() {
+      final doc = ReaderDocument(
+        bookId: 'b',
+        title: 't',
+        format: 'epub',
+        chapters: <ReaderChapter>[
+          ReaderChapter(
+            index: 0,
+            title: 'Chapter 1',
+            text: List<String>.filled(1500, 'a').join(' '),
+          ),
+          ReaderChapter(
+            index: 1,
+            title: 'Chapter 2',
+            text: List<String>.filled(1500, 'b').join(' '),
+          ),
+        ],
+      );
+      final c = ProviderContainer(
+        overrides: <Override>[
+          readerRepositoryProvider.overrideWithValue(_FakeReaderRepo(doc, null)),
+        ],
+      );
+      addTearDown(c.dispose);
+      return c;
+    }
+
+    test('builds a TOC entry per chapter', () async {
+      final c = multiChapter();
+      final ready = await _pumpReady(c, 'b');
+      expect(ready.toc.length, 2);
+      expect(ready.toc[0].title, 'Chapter 1');
+      expect(ready.toc[1].title, 'Chapter 2');
+    });
+
+    test('jumpToChapter moves to a later page', () async {
+      final c = multiChapter();
+      final ready = await _pumpReady(c, 'b');
+      final ctrl = c.read(readerControllerProvider('b').notifier);
+
+      ctrl.jumpToChapter(ready.toc[1]);
+
+      final after = c.read(readerControllerProvider('b')) as ReaderReady;
+      expect(after.pageIndex, greaterThan(0));
     });
   });
 }

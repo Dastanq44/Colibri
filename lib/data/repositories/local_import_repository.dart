@@ -13,6 +13,8 @@ import '../../features/import/data/checksum_service.dart';
 import '../../features/import/data/file_storage_service.dart';
 import '../../features/import/domain/import_preview.dart';
 import '../../features/import/domain/imported_book.dart';
+import '../../features/reader/data/epub_extractor.dart';
+import '../../shared/models/book_format.dart';
 import '../../shared/models/bookshelf_status.dart';
 import '../local/app_database.dart';
 import 'import_repository.dart';
@@ -27,12 +29,14 @@ class LocalImportRepository implements ImportRepository {
     required BookFileValidator validator,
     required BookMetadataService metadata,
     required DeviceIdService deviceIdService,
+    EpubExtractor epubExtractor = const EpubExtractor(),
   })  : _db = db,
         _storage = storage,
         _checksum = checksum,
         _validator = validator,
         _metadata = metadata,
-        _deviceIdService = deviceIdService;
+        _deviceIdService = deviceIdService,
+        _epub = epubExtractor;
 
   final AppDatabase _db;
   final FileStorageService _storage;
@@ -40,6 +44,7 @@ class LocalImportRepository implements ImportRepository {
   final BookFileValidator _validator;
   final BookMetadataService _metadata;
   final DeviceIdService _deviceIdService;
+  final EpubExtractor _epub;
 
   static const List<String> _allowedExtensions = <String>['epub', 'txt', 'pdf'];
 
@@ -111,6 +116,35 @@ class LocalImportRepository implements ImportRepository {
       }
 
       final meta = _metadata.extract(fileName: file.fileName, format: format);
+
+      // For EPUB, try to improve metadata from the OPF and confirm there is
+      // extractable text (so fast mode is enabled and status is `ready`).
+      var title = meta.title;
+      var authorDisplay = meta.authorDisplay;
+      var language = '';
+      var isFastModeSupported = meta.isFastModeSupported;
+      var textReadyStatus = meta.textReadyStatus;
+      if (format == BookFormat.epub) {
+        try {
+          final epub = _epub.extract(await File(localPath).readAsBytes());
+          if (epub != null && epub.chapters.isNotEmpty) {
+            if (epub.title != null && epub.title!.trim().isNotEmpty) {
+              title = epub.title!.trim();
+            }
+            if (epub.author != null && epub.author!.trim().isNotEmpty) {
+              authorDisplay = epub.author!.trim();
+            }
+            language = epub.language?.trim() ?? '';
+            isFastModeSupported = true;
+            textReadyStatus = 'ready';
+          }
+          // Malformed/empty EPUB keeps the fallback metadata; it still imports
+          // and shows a friendly message when opened.
+        } catch (_) {
+          // Ignore — keep fallback metadata.
+        }
+      }
+
       final deviceId = await _deviceIdService.getOrCreate();
 
       try {
@@ -121,12 +155,13 @@ class LocalImportRepository implements ImportRepository {
               id: bookId,
               sourceType: 'upload',
               format: format.wire,
-              title: meta.title,
+              title: title,
               fileLocalPath: localPath,
-              authorDisplay: Value(meta.authorDisplay),
+              authorDisplay: Value(authorDisplay),
+              language: Value(language),
               checksumSha256: Value(checksum),
-              isFastModeSupported: Value(meta.isFastModeSupported),
-              textReadyStatus: Value(meta.textReadyStatus),
+              isFastModeSupported: Value(isFastModeSupported),
+              textReadyStatus: Value(textReadyStatus),
             ),
           );
           await _db.bookshelfDao.upsertEntry(
@@ -152,8 +187,8 @@ class LocalImportRepository implements ImportRepository {
       return Ok(
         ImportedBook(
           bookId: bookId,
-          title: meta.title,
-          authorDisplay: meta.authorDisplay,
+          title: title,
+          authorDisplay: authorDisplay,
           format: format,
         ),
       );

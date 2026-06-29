@@ -1,5 +1,6 @@
 import 'package:colibri/features/reader/fast_mode/application/fast_mode_engine.dart';
 import 'package:colibri/features/reader/fast_mode/domain/fast_mode_playback_state.dart';
+import 'package:colibri/features/reader/fast_mode/domain/fast_mode_settings.dart';
 import 'package:colibri/features/reader/fast_mode/domain/fast_token.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -105,5 +106,47 @@ void main() {
     e.loadTokens(_tokens(4), startIndex: 1);
     e.pause();
     expect(saved?.tokenIndex, 1);
+  });
+
+  test('speed lock prevents WPM changes', () {
+    final e = _engine();
+    e.loadTokens(_tokens(3));
+    e.applySettings(
+      FastModeSettings.defaults().copyWith(speedLockEnabled: true),
+    );
+    final before = e.state.wpm;
+    expect(e.increaseWpm(), isFalse);
+    expect(e.state.wpm, before);
+  });
+
+  test('WPM change returns false at the boundary (no spurious feedback)', () {
+    final e = _engine();
+    e.loadTokens(_tokens(3));
+    e.setWpm(700);
+    expect(e.increaseWpm(), isFalse);
+    expect(e.state.wpm, 700);
+  });
+
+  test('applySettings snaps WPM to the new default until the user changes it',
+      () {
+    final e = _engine();
+    e.loadTokens(_tokens(3)); // default wpm 275
+
+    e.applySettings(FastModeSettings.defaults().copyWith(wpm: 350));
+    expect(e.state.wpm, 350);
+
+    e.increaseWpm(); // user touches WPM (-> 375)
+    e.applySettings(FastModeSettings.defaults().copyWith(wpm: 200));
+    expect(e.state.wpm, 375); // keeps the user's value
+  });
+
+  test('show adjacent context comes from settings', () {
+    final e = _engine();
+    e.loadTokens(_tokens(3));
+    expect(e.state.settings.showAdjacentContext, isTrue);
+    e.applySettings(
+      FastModeSettings.defaults().copyWith(showAdjacentContext: false),
+    );
+    expect(e.state.settings.showAdjacentContext, isFalse);
   });
 }

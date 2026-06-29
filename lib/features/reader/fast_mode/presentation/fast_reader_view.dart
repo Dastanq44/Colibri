@@ -4,15 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/localization/generated/app_localizations.dart';
+import '../../../../app/theme/reader_theme.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../settings/application/reader_settings_providers.dart';
 import '../application/fast_mode_engine.dart';
 import '../application/fast_mode_providers.dart';
 import '../domain/fast_mode_playback_state.dart';
 import '../domain/fast_mode_state.dart';
 
-/// Landscape fast (RSVP) reader for TXT books. Shown by [ReaderScreen] when the
-/// reader is in fast mode. Centered current word, optional dimmed neighbours,
-/// tap-left/center/right to slow/pause/speed up, with transient feedback.
+/// Landscape fast (RSVP) reader. Centered current word, optional dimmed
+/// neighbours, tap-left/center/right to slow/pause/speed up, with transient
+/// feedback. Honors persisted fast settings (WPM bounds, speed lock, adjacent
+/// context) and the reader theme palette.
 class FastReaderView extends ConsumerStatefulWidget {
   const FastReaderView({
     super.key,
@@ -60,8 +63,9 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
       _flash(l10n.fastSpeedLocked);
       return;
     }
-    engine.decreaseWpm();
-    _flash('-${engine.state.settings.step} ${l10n.wpm}');
+    if (engine.decreaseWpm()) {
+      _flash('-${engine.state.settings.step} ${l10n.wpm}');
+    }
   }
 
   void _increase(FastModeEngine engine, AppLocalizations l10n) {
@@ -69,8 +73,9 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
       _flash(l10n.fastSpeedLocked);
       return;
     }
-    engine.increaseWpm();
-    _flash('+${engine.state.settings.step} ${l10n.wpm}');
+    if (engine.increaseWpm()) {
+      _flash('+${engine.state.settings.step} ${l10n.wpm}');
+    }
   }
 
   void _toggle(FastModeEngine engine, AppLocalizations l10n) {
@@ -82,14 +87,18 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final engine = ref.watch(fastModeEngineProvider(widget.bookId));
+    final theme = ref.watch(readerSettingsProvider).valueOrNull?.theme ??
+        ReaderThemeVariant.light;
+    final palette = ReaderPalette.of(theme);
 
     return ListenableBuilder(
       listenable: engine,
       builder: (context, _) {
         final s = engine.state;
         if (s.isLoading) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+          return Scaffold(
+            backgroundColor: palette.background,
+            body: const Center(child: CircularProgressIndicator()),
           );
         }
         if (s.playback == FastModePlaybackState.error) {
@@ -97,16 +106,18 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
               ? l10n.fastNoText
               : l10n.fastUnavailable;
           return Scaffold(
+            backgroundColor: palette.background,
             body: Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    Icon(Icons.block_outlined,
-                        size: 56, color: Theme.of(context).colorScheme.primary),
+                    Icon(Icons.block_outlined, size: 56, color: palette.dim),
                     const SizedBox(height: 16),
-                    Text(message, textAlign: TextAlign.center),
+                    Text(message,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: palette.text)),
                   ],
                 ),
               ),
@@ -114,6 +125,7 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
           );
         }
         return Scaffold(
+          backgroundColor: palette.background,
           body: SafeArea(
             child: Column(
               children: <Widget>[
@@ -160,7 +172,9 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
                         ),
                       ),
                       Positioned.fill(
-                        child: IgnorePointer(child: _TokenColumn(state: s)),
+                        child: IgnorePointer(
+                          child: _TokenColumn(state: s, palette: palette),
+                        ),
                       ),
                       if (_feedback != null)
                         Positioned(
@@ -177,6 +191,7 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
                 _FastBottomBar(
                   l10n: l10n,
                   state: s,
+                  palette: palette,
                   modeLocked: widget.modeLocked,
                   onToggleModeLock: widget.onToggleModeLock,
                   onPlayPause: () => _toggle(engine, l10n),
@@ -191,15 +206,15 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
 }
 
 class _TokenColumn extends StatelessWidget {
-  const _TokenColumn({required this.state});
+  const _TokenColumn({required this.state, required this.palette});
 
   final FastModeState state;
+  final ReaderPalette palette;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dim = theme.textTheme.titleMedium
-        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final dim = theme.textTheme.titleMedium?.copyWith(color: palette.dim);
     final showAdjacent = state.settings.showAdjacentContext;
     return Center(
       child: Column(
@@ -212,7 +227,7 @@ class _TokenColumn extends StatelessWidget {
             state.currentToken?.rawText ?? '',
             textAlign: TextAlign.center,
             style: theme.textTheme.displaySmall
-                ?.copyWith(fontWeight: FontWeight.w600),
+                ?.copyWith(fontWeight: FontWeight.w600, color: palette.text),
           ),
           const SizedBox(height: 12),
           if (showAdjacent) Text(state.nextToken?.rawText ?? '', style: dim),
@@ -245,6 +260,7 @@ class _FastBottomBar extends StatelessWidget {
   const _FastBottomBar({
     required this.l10n,
     required this.state,
+    required this.palette,
     required this.modeLocked,
     required this.onToggleModeLock,
     required this.onPlayPause,
@@ -252,6 +268,7 @@ class _FastBottomBar extends StatelessWidget {
 
   final AppLocalizations l10n;
   final FastModeState state;
+  final ReaderPalette palette;
   final bool modeLocked;
   final VoidCallback onToggleModeLock;
   final VoidCallback onPlayPause;
@@ -267,6 +284,7 @@ class _FastBottomBar extends StatelessWidget {
           children: <Widget>[
             IconButton(
               tooltip: l10n.readerModeLock,
+              color: palette.text,
               icon: Icon(modeLocked ? Icons.lock : Icons.lock_open_outlined),
               onPressed: onToggleModeLock,
             ),
@@ -275,14 +293,17 @@ class _FastBottomBar extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   Text('${state.wpm} ${l10n.wpm}',
-                      style: theme.textTheme.titleMedium),
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(color: palette.text)),
                   Text('${state.progressPercent.round()}%',
-                      style: theme.textTheme.bodySmall),
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: palette.dim)),
                 ],
               ),
             ),
             IconButton(
               tooltip: state.isPlaying ? l10n.fastPause : l10n.fastPlay,
+              color: palette.text,
               icon: Icon(state.isPlaying ? Icons.pause : Icons.play_arrow),
               onPressed: onPlayPause,
             ),

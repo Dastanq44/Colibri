@@ -6,6 +6,7 @@ import 'package:drift/drift.dart' show Value;
 import '../../core/errors/failures.dart';
 import '../../core/platform/device_id_service.dart';
 import '../../core/result/result.dart';
+import '../../features/reader/data/epub_extractor.dart';
 import '../../features/reader/domain/reader_chapter.dart';
 import '../../features/reader/domain/reader_document.dart';
 import '../../features/reader/domain/reader_locator.dart';
@@ -22,11 +23,14 @@ class LocalReaderRepository implements ReaderRepository {
   LocalReaderRepository({
     required AppDatabase db,
     required DeviceIdService deviceIdService,
+    EpubExtractor epubExtractor = const EpubExtractor(),
   })  : _db = db,
-        _deviceIdService = deviceIdService;
+        _deviceIdService = deviceIdService,
+        _epub = epubExtractor;
 
   final AppDatabase _db;
   final DeviceIdService _deviceIdService;
+  final EpubExtractor _epub;
 
   @override
   Future<Result<ReaderDocument>> openBook(String bookId) async {
@@ -38,14 +42,45 @@ class LocalReaderRepository implements ReaderRepository {
       case BookFormat.txt:
         return _openTxt(book);
       case BookFormat.epub:
-        return const Err(
-          UnsupportedFormatFailure('EPUB reader is not implemented yet.'),
-        );
+        return _openEpub(book);
       case BookFormat.pdf:
         return const Err(
-          UnsupportedFormatFailure('PDF reader is not implemented yet.'),
+          UnsupportedFormatFailure('PDF reading is coming later.'),
         );
     }
+  }
+
+  Future<Result<ReaderDocument>> _openEpub(LocalBook book) async {
+    final file = File(book.fileLocalPath);
+    if (!await file.exists()) {
+      return const Err(FileMissingFailure('The book file is missing.'));
+    }
+    EpubExtractionResult? result;
+    try {
+      result = _epub.extract(await file.readAsBytes());
+    } catch (_) {
+      result = null;
+    }
+    if (result == null) {
+      return const Err(MalformedBookFailure('Could not read this EPUB file.'));
+    }
+    if (result.chapters.isEmpty) {
+      return const Err(EmptyBookFailure('No readable text was found.'));
+    }
+
+    await _db.booksDao.updateLastOpened(book.id);
+
+    final title = (result.title != null && result.title!.trim().isNotEmpty)
+        ? result.title!.trim()
+        : book.title;
+    return Ok(
+      ReaderDocument(
+        bookId: book.id,
+        title: title,
+        format: BookFormat.epub.wire,
+        chapters: result.chapters,
+      ),
+    );
   }
 
   Future<Result<ReaderDocument>> _openTxt(LocalBook book) async {

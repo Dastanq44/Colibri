@@ -27,6 +27,10 @@ class FastModeEngine extends ChangeNotifier {
 
   Timer? _timer;
 
+  /// Tracks whether the user has manually changed WPM, so applying persisted
+  /// settings doesn't override an in-session choice.
+  bool _wpmTouched = false;
+
   void _set(FastModeState next) {
     _state = next;
     notifyListeners();
@@ -83,18 +87,31 @@ class FastModeEngine extends ChangeNotifier {
 
   void togglePlayPause() => _state.isPlaying ? pause() : play();
 
-  void increaseWpm() => _changeWpm(_state.wpm + _state.settings.step);
+  /// Returns `true` only if WPM actually changed (so the UI can avoid showing
+  /// "+25 WPM" at the min/max boundary).
+  bool increaseWpm() => _changeWpm(_state.wpm + _state.settings.step);
 
-  void decreaseWpm() => _changeWpm(_state.wpm - _state.settings.step);
+  bool decreaseWpm() => _changeWpm(_state.wpm - _state.settings.step);
 
-  void setWpm(int wpm) => _changeWpm(wpm);
+  bool setWpm(int wpm) => _changeWpm(wpm);
 
-  void _changeWpm(int wpm) {
-    if (_state.settings.speedLockEnabled) return; // speed locked: ignore
+  bool _changeWpm(int wpm) {
+    if (_state.settings.speedLockEnabled) return false; // speed locked
     final clamped = wpm.clamp(_state.settings.minWpm, _state.settings.maxWpm);
-    if (clamped == _state.wpm) return;
+    if (clamped == _state.wpm) return false;
+    _wpmTouched = true;
     _set(_state.copyWith(wpm: clamped));
     if (_state.isPlaying) _startTimer(); // apply new interval
+    return true;
+  }
+
+  /// Applies persisted fast-mode settings (bounds, step, adjacent context,
+  /// speed lock). Snaps WPM to the new default until the user changes it.
+  void applySettings(FastModeSettings settings) {
+    final base = _wpmTouched ? _state.wpm : settings.wpm;
+    final wpm = base.clamp(settings.minWpm, settings.maxWpm);
+    _set(_state.copyWith(settings: settings, wpm: wpm));
+    if (_state.isPlaying) _startTimer();
   }
 
   void seekToTokenIndex(int index) {
