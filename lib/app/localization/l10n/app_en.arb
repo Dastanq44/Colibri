@@ -142,5 +142,20 @@
   "tableOfContents": "Table of contents",
   "tocEmpty": "No chapters",
   "readerEpubError": "Could not read this EPUB file.",
-  "readerNoText": "No readable text was found in this book."
+  "readerNoText": "No readable text was found in this book.",
+  "syncSectionTitle": "Sync",
+  "syncNow": "Sync now",
+  "syncRunning": "Syncing…",
+  "syncBackendNotConfigured": "Backend not configured",
+  "syncSignInRequired": "Sign in to sync",
+  "syncPending": "{count} change(s) pending",
+  "@syncPending": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "syncUpToDate": "All changes synced",
+  "syncSucceeded": "Synced {count} item(s)",
+  "@syncSucceeded": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "syncFailed": "Sync failed"
 }

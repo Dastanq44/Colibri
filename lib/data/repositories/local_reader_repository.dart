@@ -11,26 +11,37 @@ import '../../features/reader/domain/reader_chapter.dart';
 import '../../features/reader/domain/reader_document.dart';
 import '../../features/reader/domain/reader_locator.dart';
 import '../../features/reader/domain/reader_mode.dart';
+import '../../features/sync/data/local_sync_queue_repository.dart';
 import '../../shared/models/book_format.dart';
 import '../local/app_database.dart';
 import '../local/sync_status.dart';
 import 'reader_repository.dart';
 
 /// Local-first [ReaderRepository]. Loads book text from on-device storage and
-/// reads/writes reading progress via Drift. TXT is fully supported; EPUB and
-/// PDF return a clear unsupported failure for now.
+/// reads/writes reading progress via Drift. TXT and extracted EPUB text are
+/// supported; PDF is unsupported for now.
 class LocalReaderRepository implements ReaderRepository {
   LocalReaderRepository({
     required AppDatabase db,
     required DeviceIdService deviceIdService,
+    required LocalSyncQueueRepository syncQueue,
     EpubExtractor epubExtractor = const EpubExtractor(),
   })  : _db = db,
         _deviceIdService = deviceIdService,
+        _sync = syncQueue,
         _epub = epubExtractor;
 
   final AppDatabase _db;
   final DeviceIdService _deviceIdService;
+  final LocalSyncQueueRepository _sync;
   final EpubExtractor _epub;
+
+  /// Stamps book + shelf last-opened and marks the shelf row for sync.
+  Future<void> _markOpened(String bookId) async {
+    await _db.booksDao.updateLastOpened(bookId);
+    await _db.bookshelfDao.markOpened(bookId);
+    await _sync.enqueueBookshelf(bookId);
+  }
 
   @override
   Future<Result<ReaderDocument>> openBook(String bookId) async {
@@ -68,7 +79,7 @@ class LocalReaderRepository implements ReaderRepository {
       return const Err(EmptyBookFailure('No readable text was found.'));
     }
 
-    await _db.booksDao.updateLastOpened(book.id);
+    await _markOpened(book.id);
 
     final title = (result.title != null && result.title!.trim().isNotEmpty)
         ? result.title!.trim()
@@ -94,8 +105,8 @@ class LocalReaderRepository implements ReaderRepository {
       final raw = utf8.decode(bytes, allowMalformed: true);
       final text = raw.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
 
-      // Stamp last-opened.
-      await _db.booksDao.updateLastOpened(book.id);
+      // Stamp last-opened (book + shelf) for sync readiness.
+      await _markOpened(book.id);
 
       return Ok(
         ReaderDocument(
@@ -161,6 +172,9 @@ class LocalReaderRepository implements ReaderRepository {
           syncStatus: const Value(SyncStatus.pendingUpdate),
         ),
       );
+      // Coalesced: one pending reading_progress item per book (fast-mode
+      // playback won't create hundreds of queue rows).
+      await _sync.enqueueProgressUpdate(bookId);
       return const Ok(null);
     } catch (e) {
       return Err(StorageFailure(e.toString()));

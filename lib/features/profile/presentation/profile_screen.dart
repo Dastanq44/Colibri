@@ -4,7 +4,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
+import '../../../core/errors/failures.dart';
+import '../../../data/remote/supabase_client_provider.dart';
 import '../../auth/application/auth_providers.dart';
+import '../../sync/application/sync_controller.dart';
+import '../../sync/application/sync_providers.dart';
 import '../application/profile_providers.dart';
 
 /// Basic profile screen. Shows a signed-out state with a sign-in CTA, or the
@@ -182,6 +186,8 @@ class _SignedInBody extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 24),
+        _SyncSection(l10n: l10n),
+        const SizedBox(height: 8),
         ListTile(
           leading: const Icon(Icons.settings_outlined),
           title: Text(l10n.settingsTitle),
@@ -195,6 +201,66 @@ class _SignedInBody extends ConsumerWidget {
           label: Text(l10n.profileSignOut),
         ),
       ],
+    );
+  }
+}
+
+/// Manual sync entry point. Shows pending count + last result; disabled with a
+/// clear message when the backend is not configured.
+class _SyncSection extends ConsumerWidget {
+  const _SyncSection({required this.l10n});
+
+  final AppLocalizations l10n;
+
+  String _statusText(SyncUiState state, int pending) {
+    return switch (state) {
+      SyncRunning() => l10n.syncRunning,
+      SyncSuccess(:final result) =>
+        result.processed == 0 ? l10n.syncUpToDate : l10n.syncSucceeded(result.succeeded),
+      SyncFailure(:final failure) => failure is UnauthorizedFailure
+          ? l10n.syncSignInRequired
+          : l10n.syncFailed,
+      SyncIdle() =>
+        pending == 0 ? l10n.syncUpToDate : l10n.syncPending(pending),
+    };
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final configured = ref.watch(supabaseConfiguredProvider);
+    if (!configured) {
+      return Card(
+        margin: EdgeInsets.zero,
+        child: ListTile(
+          leading: const Icon(Icons.cloud_off_outlined),
+          title: Text(l10n.syncSectionTitle),
+          subtitle: Text(l10n.syncBackendNotConfigured),
+        ),
+      );
+    }
+
+    final state = ref.watch(syncControllerProvider);
+    final pending = ref.watch(pendingSyncCountProvider).valueOrNull ?? 0;
+    final running = state is SyncRunning;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: ListTile(
+        leading: const Icon(Icons.cloud_sync_outlined),
+        title: Text(l10n.syncSectionTitle),
+        subtitle: Text(_statusText(state, pending)),
+        trailing: running
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : TextButton(
+                onPressed: () =>
+                    ref.read(syncControllerProvider.notifier).syncNow(),
+                child: Text(l10n.syncNow),
+              ),
+      ),
     );
   }
 }

@@ -126,7 +126,7 @@ void main() {
         ),
       );
 
-      final pending = await db.syncQueueDao.getPending();
+      final pending = await db.syncQueueDao.getRunnablePending();
       expect(pending, hasLength(1));
       expect(pending.first.entityId, 'b1');
       expect(pending.first.status, 'pending');

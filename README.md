@@ -27,27 +27,29 @@ Foundational phases are landing in order:
 - ✅ **Normal reader (TXT + EPUB)**: tap a book → portrait reader → tap left/right to page → progress saved locally → reopening resumes. EPUB text is extracted (ZIP/OPF/XHTML) into chapters. PDF shows a friendly "coming later".
 - ✅ **Fast mode (TXT + EPUB)**: rotate the reader to landscape for RSVP-style fast reading — centered word, tap left/center/right to slow/pause/speed up, with position carried across normal ↔ fast. Orientation only switches mode *inside the reader* (no global lock).
 - ✅ **Reader settings (persisted)**: theme (light/sepia/dark), font size, line height, letter spacing, mode lock, speed lock, default WPM, show-adjacent — all in `local_reader_settings`/`local_fast_settings` and applied live to both modes. Reader menu has a table of contents.
+- 🚧 **Sync foundation (manual)**: local changes (import, progress, shelf) enqueue into `sync_queue` (coalesced). A `SupabaseSyncRepository` processes the queue on a manual **Sync now** from Profile — book/file/shelf/progress upsert to Supabase under RLS. Dev-safe: no backend / signed-out leaves the queue untouched. No automatic background sync or conflict resolution yet.
 
-There is still no PDF rendering or cloud sync — those land in later phases (see the task plan).
+There is still no PDF rendering, automatic background sync, or multi-device conflict resolution — those land in later phases (see the task plan).
 
 ## First-time setup
 
-The native `android/` and `ios/` folders are **not** checked in yet. After cloning, generate them and fetch packages:
+The native `android/` and `ios/` folders **are now present** in the repo. After cloning, just fetch packages and run code generation:
 
 ```bash
-# 1. Generate the native platform projects without touching lib/.
-flutter create --platforms=android,ios --org com.colibri .
-
-# 2. Fetch dependencies, generate localizations, then Drift code.
 flutter pub get
 flutter gen-l10n
 dart run build_runner build --delete-conflicting-outputs
 
-# 3. Create your local env file from the template and fill in values.
+# Then create your local env file from the template and fill in values.
 cp .env.example .env.dev
-
-# 4. (Optional) Stand up the backend — see supabase/README.md.
+# (Optional) Stand up the backend — see supabase/README.md.
 ```
+
+> If `android/` or `ios/` are missing in a fresh copy, regenerate them with
+> `flutter create --platforms=android,ios --org com.colibri .` (does not touch `lib/`).
+>
+> Until `flutter gen-l10n` runs, the analyzer will report a missing
+> `app_localizations.dart` import — that file is generated from the ARB files.
 
 > Until `flutter gen-l10n` runs, the analyzer will report a missing
 > `app_localizations.dart` import — that file is generated from the ARB files.
@@ -122,37 +124,33 @@ supabase/                   # migrations, seed.sql, policies (Phase 1)
 | `SENTRY_DSN`        | no       | Phase 15 | crash reporting                |
 | `ANALYTICS_ENABLED` | no       | Phase 15 | keep `false` in dev            |
 
-## Android pre-iOS testing checklist
+## Android hardening before iOS
 
-iOS/Xcode testing is deferred; validate on Android first. Manual smoke test:
+iOS/Xcode testing is deferred; validate on Android first. Manual pass:
 
 1. Import TXT.
-2. Open TXT in reader.
-3. Change reader font size/theme.
-4. Rotate to landscape.
-5. Use fast mode.
-6. Pause/play.
-7. Increase/decrease WPM.
-8. Enable mode lock.
-9. Enable speed lock.
-10. Background and resume app.
-11. Reopen book and confirm progress.
-12. Import EPUB.
-13. Open EPUB extracted text.
-14. Use fast mode on EPUB.
-15. Try a malformed/unsupported file (PDF, broken EPUB).
+2. Import EPUB.
+3. Open normal reader.
+4. Rotate to fast mode.
+5. Change WPM.
+6. Enable speed lock.
+7. Enable mode lock.
+8. Change theme/font.
+9. Background/resume while normal reader is open.
+10. Background/resume while fast mode is playing.
+11. Delete imported book.
+12. Reimport same file.
+13. Try malformed EPUB.
+14. Try large file.
+15. Sign in.
+16. Run manual sync (Profile → Sync now); inspect Supabase rows/storage.
+17. Restart app and confirm local progress.
 
-iOS-specific checks still required later (need a Mac + Xcode):
-
-- file picker behavior
-- local storage paths
-- safe areas/notch
-- haptics
-- orientation behavior on a real iPhone
-- TestFlight signing/build
+iOS still requires later real-device checks for file picker, app sandbox
+paths, safe areas/notch, orientation behavior, and TestFlight signing.
 
 ## Next task
 
-**Android device hardening + local sync preparation**: rotation on real
-Android, import/background-resume edge cases, then the sync queue processor and
-Supabase upload for imported files — iOS/Xcode/TestFlight after that.
+**Android real-device hardening pass** — mostly manual: import TXT/EPUB, rotate
+repeatedly, test fast-mode timing, background/resume, delete/reimport, sign in
+and run manual sync, inspect Supabase rows/storage; then prepare for iOS/Xcode.

@@ -4,6 +4,7 @@ import '../../../core/errors/failures.dart';
 import '../../../core/result/result.dart';
 import '../domain/reader_document.dart';
 import '../domain/reader_locator.dart';
+import '../domain/reader_locator_types.dart';
 import '../domain/reader_page.dart';
 import '../domain/reader_progress.dart';
 import '../domain/toc_entry.dart';
@@ -65,8 +66,9 @@ class ReaderReady extends ReaderState {
 }
 
 /// Loads a book, paginates it, resumes from saved progress, and persists the
-/// position on each page turn.
-class ReaderController extends FamilyNotifier<ReaderState, String> {
+/// position on each page turn. Auto-disposed so leaving the reader frees its
+/// state; ReaderScreen saves the position before it unmounts.
+class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
   @override
   ReaderState build(String bookId) {
     _load();
@@ -179,7 +181,7 @@ class ReaderController extends FamilyNotifier<ReaderState, String> {
     if (s is! ReaderReady) return;
     final page = s.currentPage;
     final locator = ReaderLocator(
-      locatorType: 'txt_offset',
+      locatorType: ReaderLocatorTypes.textOffset,
       locatorValue: page.startOffset.toString(),
       pageNumber: s.pageIndex,
       percent: s.progress.percent,
@@ -189,6 +191,6 @@ class ReaderController extends FamilyNotifier<ReaderState, String> {
 }
 
 final readerControllerProvider =
-    NotifierProvider.family<ReaderController, ReaderState, String>(
+    NotifierProvider.autoDispose.family<ReaderController, ReaderState, String>(
   ReaderController.new,
 );

@@ -19,8 +19,10 @@ class BookMetadata {
   final String textReadyStatus;
 }
 
-/// Derives [BookMetadata] from a file name + format. No file parsing yet —
-/// the title falls back to the file name.
+/// Derives basic [BookMetadata] from a file name + format — the title falls
+/// back to the file name. This is the first-pass fallback; EPUB import
+/// additionally upgrades title/author/language via OPF extraction (see
+/// `LocalImportRepository`).
 class BookMetadataService {
   const BookMetadataService();
 

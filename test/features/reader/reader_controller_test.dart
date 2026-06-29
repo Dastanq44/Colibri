@@ -5,6 +5,7 @@ import 'package:colibri/features/reader/application/reader_providers.dart';
 import 'package:colibri/features/reader/domain/reader_chapter.dart';
 import 'package:colibri/features/reader/domain/reader_document.dart';
 import 'package:colibri/features/reader/domain/reader_locator.dart';
+import 'package:colibri/features/reader/domain/reader_locator_types.dart';
 import 'package:colibri/features/reader/domain/reader_mode.dart';
 import 'package:colibri/features/reader/domain/reader_page.dart';
 import 'package:colibri/features/reader/domain/toc_entry.dart';
@@ -57,6 +58,8 @@ ReaderReady _ready(int pageIndex, int count) => ReaderReady(
     );
 
 Future<ReaderReady> _pumpReady(ProviderContainer c, String id) async {
+  // The controller is autoDispose; keep it alive while we poll for readiness.
+  c.listen(readerControllerProvider(id), (_, __) {});
   for (var i = 0; i < 100; i++) {
     final s = c.read(readerControllerProvider(id));
     if (s is ReaderReady) return s;
@@ -193,6 +196,48 @@ void main() {
 
       final after = c.read(readerControllerProvider('b')) as ReaderReady;
       expect(after.pageIndex, greaterThan(0));
+    });
+  });
+
+  group('ReaderController locator types', () {
+    test('a legacy txt_offset locator still resolves to a page', () async {
+      final c = _container(const ReaderLocator(
+        locatorType: ReaderLocatorTypes.legacyTxtOffset,
+        locatorValue: '3000',
+        percent: 0,
+      ));
+      final ready = await _pumpReady(c, 'b');
+      expect(ready.pageIndex, greaterThan(0));
+    });
+
+    test('saves progress using the text_offset locator type', () async {
+      final fake = _FakeReaderRepo(
+        ReaderDocument(
+          bookId: 'b',
+          title: 't',
+          format: 'txt',
+          chapters: <ReaderChapter>[
+            ReaderChapter(
+              index: 0,
+              title: 't',
+              text: List<String>.filled(2000, 'word').join(' '),
+            ),
+          ],
+        ),
+        null,
+      );
+      final c = ProviderContainer(
+        overrides: <Override>[
+          readerRepositoryProvider.overrideWithValue(fake),
+        ],
+      );
+      addTearDown(c.dispose);
+
+      await _pumpReady(c, 'b');
+      c.read(readerControllerProvider('b').notifier).nextPage();
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+
+      expect(fake.lastSaved?.locatorType, ReaderLocatorTypes.textOffset);
     });
   });
 }

@@ -31,6 +31,17 @@ class BookshelfDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// Stamps the shelf's last-opened time and marks it for sync. No-op (no
+  /// crash) when there is no shelf row for [bookId].
+  Future<void> markOpened(String bookId) async {
+    await (update(localBookshelf)..where((e) => e.bookId.equals(bookId))).write(
+      LocalBookshelfCompanion(
+        lastOpenedAt: Value(dbNow()),
+        syncStatus: const Value(SyncStatus.pendingUpdate),
+      ),
+    );
+  }
+
   Stream<List<LocalShelfEntry>> watchByStatus(String status) =>
       (select(localBookshelf)..where((e) => e.status.equals(status))).watch();
 

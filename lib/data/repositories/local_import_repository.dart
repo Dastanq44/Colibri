@@ -14,9 +14,12 @@ import '../../features/import/data/file_storage_service.dart';
 import '../../features/import/domain/import_preview.dart';
 import '../../features/import/domain/imported_book.dart';
 import '../../features/reader/data/epub_extractor.dart';
+import '../../features/sync/data/local_sync_queue_repository.dart';
+import '../../features/sync/domain/sync_operation.dart';
 import '../../shared/models/book_format.dart';
 import '../../shared/models/bookshelf_status.dart';
 import '../local/app_database.dart';
+import '../local/sync_status.dart';
 import 'import_repository.dart';
 
 /// Local-first [ImportRepository]. No cloud upload — files stay on device and
@@ -29,6 +32,7 @@ class LocalImportRepository implements ImportRepository {
     required BookFileValidator validator,
     required BookMetadataService metadata,
     required DeviceIdService deviceIdService,
+    required LocalSyncQueueRepository syncQueue,
     EpubExtractor epubExtractor = const EpubExtractor(),
   })  : _db = db,
         _storage = storage,
@@ -36,6 +40,7 @@ class LocalImportRepository implements ImportRepository {
         _validator = validator,
         _metadata = metadata,
         _deviceIdService = deviceIdService,
+        _sync = syncQueue,
         _epub = epubExtractor;
 
   final AppDatabase _db;
@@ -44,6 +49,7 @@ class LocalImportRepository implements ImportRepository {
   final BookFileValidator _validator;
   final BookMetadataService _metadata;
   final DeviceIdService _deviceIdService;
+  final LocalSyncQueueRepository _sync;
   final EpubExtractor _epub;
 
   static const List<String> _allowedExtensions = <String>['epub', 'txt', 'pdf'];
@@ -162,12 +168,14 @@ class LocalImportRepository implements ImportRepository {
               checksumSha256: Value(checksum),
               isFastModeSupported: Value(isFastModeSupported),
               textReadyStatus: Value(textReadyStatus),
+              syncStatus: const Value(SyncStatus.pendingUpload),
             ),
           );
           await _db.bookshelfDao.upsertEntry(
             LocalBookshelfCompanion.insert(
               bookId: bookId,
               status: BookShelfStatus.reading.wire,
+              syncStatus: const Value(SyncStatus.pendingUpload),
             ),
           );
           await _db.progressDao.saveProgress(
@@ -183,6 +191,11 @@ class LocalImportRepository implements ImportRepository {
         await _storage.deleteBookStorage(bookId);
         return Err(StorageFailure('Could not save the book (${e.runtimeType}).'));
       }
+
+      // Enqueue cloud sync work (processed only on manual sign-in + sync).
+      await _sync.enqueueBookCreate(bookId);
+      await _sync.enqueueBookFileUpload(bookId);
+      await _sync.enqueueBookshelf(bookId, operation: SyncOperation.create);
 
       return Ok(
         ImportedBook(

@@ -1,0 +1,15 @@
+/// Locator-type identifiers stored in `reading_progress.locator_type`.
+///
+/// TXT and extracted EPUB text both use a character offset into the document's
+/// full text. New saves use [textOffset]; older saves may use
+/// [legacyTxtOffset] and must keep resolving.
+abstract final class ReaderLocatorTypes {
+  const ReaderLocatorTypes._();
+
+  static const String textOffset = 'text_offset';
+  static const String legacyTxtOffset = 'txt_offset';
+
+  /// Whether [type] is a character-offset locator (current or legacy).
+  static bool isOffset(String type) =>
+      type == textOffset || type == legacyTxtOffset;
+}

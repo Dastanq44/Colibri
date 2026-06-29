@@ -121,5 +121,14 @@
   "tableOfContents": "Оглавление",
   "tocEmpty": "Нет глав",
   "readerEpubError": "Не удалось прочитать этот файл EPUB.",
-  "readerNoText": "В этой книге не найден читаемый текст."
+  "readerNoText": "В этой книге не найден читаемый текст.",
+  "syncSectionTitle": "Синхронизация",
+  "syncNow": "Синхронизировать",
+  "syncRunning": "Синхронизация…",
+  "syncBackendNotConfigured": "Бэкенд не настроен",
+  "syncSignInRequired": "Войдите, чтобы синхронизировать",
+  "syncPending": "Изменений в очереди: {count}",
+  "syncUpToDate": "Все изменения синхронизированы",
+  "syncSucceeded": "Синхронизировано: {count}",
+  "syncFailed": "Ошибка синхронизации"
 }

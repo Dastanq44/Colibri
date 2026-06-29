@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/result/result.dart';
 import '../../application/reader_providers.dart';
 import '../../domain/reader_locator.dart';
+import '../../domain/reader_locator_types.dart';
 import '../../domain/reader_mode.dart';
 import '../../settings/application/reader_settings_providers.dart';
 import '../data/fast_mode_tokenizer.dart';
@@ -26,7 +27,7 @@ final fastModeEngineProvider =
       await repo.saveLocator(
         bookId,
         ReaderLocator(
-          locatorType: 'txt_offset',
+          locatorType: ReaderLocatorTypes.textOffset,
           locatorValue: token.startOffset.toString(),
           paragraphIndex: token.paragraphIndex,
           tokenIndex: token.tokenIndex,

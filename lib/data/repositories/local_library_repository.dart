@@ -4,18 +4,21 @@ import '../../core/errors/failures.dart';
 import '../../core/result/result.dart';
 import '../../features/import/data/file_storage_service.dart';
 import '../../features/library/domain/library_book.dart';
+import '../../features/sync/data/local_sync_queue_repository.dart';
 import '../../shared/models/book_format.dart';
 import '../../shared/models/bookshelf_status.dart';
 import '../local/app_database.dart';
 import 'library_repository.dart';
 
 /// Local-first [LibraryRepository] backed by Drift. Joins books + bookshelf +
-/// progress into [LibraryBook] views. No Supabase access here.
+/// progress into [LibraryBook] views. Local changes are enqueued for later
+/// cloud sync; no direct Supabase access here.
 class LocalLibraryRepository implements LibraryRepository {
-  LocalLibraryRepository(this._db, this._storage);
+  LocalLibraryRepository(this._db, this._storage, this._sync);
 
   final AppDatabase _db;
   final FileStorageService _storage;
+  final LocalSyncQueueRepository _sync;
 
   JoinedSelectStatement<HasResultSet, dynamic> _libraryQuery() {
     return _db.select(_db.localBooks).join(<Join>[
@@ -69,6 +72,7 @@ class LocalLibraryRepository implements LibraryRepository {
   ) async {
     try {
       await _db.bookshelfDao.setStatus(bookId, status.wire);
+      await _sync.enqueueBookshelf(bookId);
       return const Ok(null);
     } catch (e) {
       return Err(StorageFailure(e.toString()));
@@ -77,7 +81,10 @@ class LocalLibraryRepository implements LibraryRepository {
 
   @override
   Future<Result<void>> removeBookFromLibrary(String bookId) async {
-    // 1) Clean up all local DB records atomically.
+    // Local-only delete for now: clears local records + queued sync ops so a
+    // removed book is not later uploaded.
+    // TODO(sync): if the book was already synced (cloudBookId set), enqueue a
+    // cloud delete and define multi-device delete semantics.
     try {
       await _db.transaction(() async {
         await (_db.delete(_db.localReadingProgress)

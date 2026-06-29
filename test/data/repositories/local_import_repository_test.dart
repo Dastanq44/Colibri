@@ -11,6 +11,7 @@ import 'package:colibri/features/import/data/checksum_service.dart';
 import 'package:colibri/features/import/data/file_storage_service.dart';
 import 'package:colibri/features/import/domain/import_preview.dart';
 import 'package:colibri/features/import/domain/imported_book.dart';
+import 'package:colibri/features/sync/data/local_sync_queue_repository.dart';
 import 'package:colibri/shared/models/book_format.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +31,7 @@ void main() {
       validator: const BookFileValidator(),
       metadata: const BookMetadataService(),
       deviceIdService: DeviceIdService(db.keyValueDao),
+      syncQueue: LocalSyncQueueRepository(db),
     );
   });
 
@@ -67,6 +69,19 @@ void main() {
     expect(await db.progressDao.getByBookId(book.bookId), isNotNull);
     // The file was copied into app storage.
     expect(File(stored.fileLocalPath).existsSync(), isTrue);
+
+    // Import enqueues cloud sync work.
+    final queued = (await db.syncQueueDao.getAll())
+        .map((e) => '${e.entityType}:${e.operation}')
+        .toSet();
+    expect(
+      queued,
+      containsAll(<String>[
+        'book:create',
+        'book_file:upload_file',
+        'bookshelf:create',
+      ]),
+    );
   });
 
   test('rejects a duplicate file (same content)', () async {

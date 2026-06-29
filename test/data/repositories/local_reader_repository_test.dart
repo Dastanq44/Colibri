@@ -8,6 +8,7 @@ import 'package:colibri/data/repositories/local_reader_repository.dart';
 import 'package:colibri/features/reader/domain/reader_document.dart';
 import 'package:colibri/features/reader/domain/reader_locator.dart';
 import 'package:colibri/features/reader/domain/reader_mode.dart';
+import 'package:colibri/features/sync/data/local_sync_queue_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -22,6 +23,7 @@ void main() {
     repo = LocalReaderRepository(
       db: db,
       deviceIdService: DeviceIdService(db.keyValueDao),
+      syncQueue: LocalSyncQueueRepository(db),
     );
   });
 
@@ -131,5 +133,42 @@ void main() {
     expect(saved!.tokenIndex, 7);
     expect(saved.paragraphIndex, 3);
     expect(saved.locatorValue, '42');
+  });
+
+  test('opening a book stamps shelf last-opened and enqueues a bookshelf item',
+      () async {
+    await seedBook('b1', format: 'txt', content: 'hello');
+    await db.bookshelfDao.upsertEntry(
+      LocalBookshelfCompanion.insert(bookId: 'b1', status: 'reading'),
+    );
+
+    await repo.openBook('b1');
+
+    final shelf = await db.bookshelfDao.getByBookId('b1');
+    expect(shelf!.lastOpenedAt, isNotNull);
+    final queued =
+        (await db.syncQueueDao.getAll()).map((e) => e.entityType).toSet();
+    expect(queued, contains('bookshelf'));
+  });
+
+  test('saving progress enqueues a single coalesced reading_progress item',
+      () async {
+    await seedBook('b1', format: 'txt', content: 'hello world');
+
+    await repo.saveLocator(
+      'b1',
+      const ReaderLocator(
+          locatorType: 'text_offset', locatorValue: '0', percent: 0),
+    );
+    await repo.saveLocator(
+      'b1',
+      const ReaderLocator(
+          locatorType: 'text_offset', locatorValue: '5', percent: 10),
+    );
+
+    final items = (await db.syncQueueDao.getAll())
+        .where((e) => e.entityType == 'reading_progress')
+        .toList();
+    expect(items, hasLength(1));
   });
 }

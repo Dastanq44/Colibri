@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/local/database_providers.dart';
 import '../../../data/repositories/import_repository.dart';
 import '../../../data/repositories/local_import_repository.dart';
+import '../../sync/application/sync_providers.dart';
 import '../data/book_file_validator.dart';
 import '../data/book_metadata_service.dart';
 import '../data/checksum_service.dart';
@@ -29,5 +30,6 @@ final importRepositoryProvider = Provider<ImportRepository>((ref) {
     validator: ref.watch(bookFileValidatorProvider),
     metadata: ref.watch(bookMetadataServiceProvider),
     deviceIdService: ref.watch(deviceIdServiceProvider),
+    syncQueue: ref.watch(localSyncQueueRepositoryProvider),
   );
 });
