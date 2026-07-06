@@ -74,6 +74,7 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
         lineHeight: const Value(ReaderDefaults.lineHeight),
         letterSpacing: const Value(ReaderDefaults.letterSpacing),
         pageAnimation: const Value(ReaderDefaults.pageAnimation),
+        hapticsEnabled: const Value(ReaderDefaults.hapticsEnabled),
         modeLockEnabled: const Value(ReaderDefaults.modeLockEnabled),
         speedLockEnabled: const Value(ReaderDefaults.speedLockEnabled),
         autoFastModeEnabled: const Value(ReaderDefaults.autoFastModeEnabled),

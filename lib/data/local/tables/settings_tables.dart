@@ -12,6 +12,8 @@ class LocalReaderSettings extends Table {
   RealColumn get lineHeight => real().withDefault(const Constant(1.5))();
   RealColumn get letterSpacing => real().withDefault(const Constant(0.0))();
   TextColumn get pageAnimation => text().withDefault(const Constant('slide'))();
+  BoolColumn get hapticsEnabled =>
+      boolean().withDefault(const Constant(true))();
   BoolColumn get modeLockEnabled =>
       boolean().withDefault(const Constant(false))();
   BoolColumn get speedLockEnabled =>

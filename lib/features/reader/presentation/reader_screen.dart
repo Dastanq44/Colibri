@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
@@ -96,6 +97,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   bool get _modeLocked =>
       ref.read(readerSettingsProvider).valueOrNull?.modeLockEnabled ?? false;
 
+  /// Fires [feedback] only when the persisted haptics setting allows it
+  /// (TASK-1007). Fails closed (`?? false`): while settings are still loading
+  /// we must not vibrate against a persisted opt-out. Fire-and-forget:
+  /// haptics must never block or throw into UI.
+  void _haptic(Future<void> Function() feedback) {
+    final enabled =
+        ref.read(readerSettingsProvider).valueOrNull?.hapticsEnabled ?? false;
+    if (enabled) unawaited(feedback());
+  }
+
   /// Debounced orientation → mode switch (stability threshold avoids flips).
   /// [lockOverride] supplies a just-written lock value that the settings
   /// stream may not reflect yet.
@@ -123,6 +134,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
 
   void _commitModeSwitch(ReaderMode to) {
     _handoffPosition(to);
+    if (to == ReaderMode.fast) _haptic(HapticFeedback.lightImpact);
     setState(() {
       _effectiveMode = to;
       _pendingMode = null;
@@ -157,6 +169,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
 
   void _toggleModeLock(bool currentlyLocked) {
     final locked = !currentlyLocked;
+    _haptic(HapticFeedback.selectionClick);
     ref.read(readerSettingsRepositoryProvider).setModeLock(locked);
     // React with the fresh value now — the settings stream only re-emits after
     // the async write lands, so reading it here would race (and lose) the
@@ -217,6 +230,19 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+
+    // Completion haptic (TASK-1007): fires when the normal reader arrives at
+    // the last page from an earlier one. Fast mode's completion haptic comes
+    // from the engine listener in FastReaderView.
+    ref.listen(readerControllerProvider(widget.bookId), (previous, next) {
+      if (previous is ReaderReady &&
+          next is ReaderReady &&
+          previous.progress.hasNext &&
+          !next.progress.hasNext) {
+        _haptic(HapticFeedback.mediumImpact);
+      }
+    });
+
     final state = ref.watch(readerControllerProvider(widget.bookId));
     final settings =
         ref.watch(readerSettingsProvider).valueOrNull ?? ReaderSettings.defaults();
@@ -370,16 +396,49 @@ class _NormalReaderView extends StatelessWidget {
                         onNext();
                       }
                     },
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 16),
-                      child: Text(
-                        state.currentPage.text.trim(),
-                        style: TextStyle(
-                          fontSize: settings.fontSize.toDouble(),
-                          height: settings.lineHeight,
-                          letterSpacing: settings.letterSpacing,
-                          color: palette.text,
+                    // Subtle slide+fade on page turns; Duration.zero swaps
+                    // instantly when the page-animation setting is off or
+                    // motion is reduced (in-app setting or system-wide).
+                    // Fast mode needs no equivalent gate: it always enters
+                    // paused and has no animated transitions of its own.
+                    child: AnimatedSwitcher(
+                      duration: settings.pageAnimationEnabled &&
+                              !settings.reducedMotion &&
+                              !MediaQuery.disableAnimationsOf(context)
+                          ? AppConstants.pageTurnAnimationDuration
+                          : Duration.zero,
+                      // Default layout centers children at their own height;
+                      // expand keeps every page top-aligned and full-height
+                      // (short last pages would otherwise float mid-screen).
+                      layoutBuilder: (currentChild, previousChildren) => Stack(
+                        fit: StackFit.expand,
+                        children: <Widget>[
+                          ...previousChildren,
+                          if (currentChild != null) currentChild,
+                        ],
+                      ),
+                      transitionBuilder: (child, animation) => FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0.04, 0),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: child,
+                        ),
+                      ),
+                      child: SingleChildScrollView(
+                        key: ValueKey<int>(state.pageIndex),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 16),
+                        child: Text(
+                          state.currentPage.text.trim(),
+                          style: settings.fontFamily.applyTo(TextStyle(
+                            fontSize: settings.fontSize.toDouble(),
+                            height: settings.lineHeight,
+                            letterSpacing: settings.letterSpacing,
+                            color: palette.text,
+                          )),
                         ),
                       ),
                     ),
@@ -436,10 +495,15 @@ class _NormalBottomBar extends StatelessWidget {
                 children: <Widget>[
                   LinearProgressIndicator(
                     value: (progress.percent / 100).clamp(0.0, 1.0),
+                    semanticsLabel: l10n.readerProgressLabel,
+                    semanticsValue: '${progress.percent.round()}%',
                   ),
                   const SizedBox(height: 4),
-                  Text('${progress.percent.round()}%',
-                      style: theme.textTheme.bodySmall),
+                  // The indicator above already announces the percent.
+                  ExcludeSemantics(
+                    child: Text('${progress.percent.round()}%',
+                        style: theme.textTheme.bodySmall),
+                  ),
                 ],
               ),
             ),

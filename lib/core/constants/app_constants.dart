@@ -21,6 +21,10 @@ abstract final class AppConstants {
   /// How long transient WPM/speed feedback stays visible (Phase 9).
   static const Duration speedFeedbackDuration = Duration(milliseconds: 650);
 
+  /// Page-turn transition length in the normal reader (Phase 10). Gated by
+  /// the persisted "page animation" setting.
+  static const Duration pageTurnAnimationDuration = Duration(milliseconds: 200);
+
   // --- Reader defaults (reader settings: Phase 2 / Phase 10) ---
   static const double readerFontSizeDefault = 18;
   static const double readerLineHeightDefault = 1.5;

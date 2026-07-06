@@ -58,7 +58,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -69,11 +69,34 @@ class AppDatabase extends _$AppDatabase {
           if (from < 2) {
             // v2: sync-queue rows are stamped with the owning user so one
             // account can never upload another account's queued changes.
-            await m.addColumn(syncQueue, syncQueue.userId);
+            await _addColumnIfAbsent(m, syncQueue, syncQueue.userId);
+          }
+          if (from < 3) {
+            // v3: opt-out haptics preference for reader feedback (TASK-1007).
+            await _addColumnIfAbsent(
+              m,
+              localReaderSettings,
+              localReaderSettings.hapticsEnabled,
+            );
           }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
         },
       );
+
+  /// Idempotent [Migrator.addColumn]: an app downgrade re-stamps a lower
+  /// `user_version` without dropping columns, so the next upgrade would
+  /// otherwise crash on "duplicate column name" and brick the database.
+  Future<void> _addColumnIfAbsent(
+    Migrator m,
+    TableInfo<Table, dynamic> table,
+    GeneratedColumn<Object> column,
+  ) async {
+    final info = await customSelect(
+      'PRAGMA table_info(${table.actualTableName})',
+    ).get();
+    final exists = info.any((row) => row.read<String>('name') == column.name);
+    if (!exists) await m.addColumn(table, column);
+  }
 }

@@ -18,6 +18,7 @@ abstract final class ReaderDefaults {
   static const double lineHeight = 1.5;
   static const double letterSpacing = 0;
   static const String pageAnimation = 'slide';
+  static const bool hapticsEnabled = true;
   static const bool modeLockEnabled = false;
   static const bool speedLockEnabled = false;
   static const bool autoFastModeEnabled = true;

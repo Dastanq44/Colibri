@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/localization/generated/app_localizations.dart';
+import '../../../../app/theme/reader_fonts.dart';
 import '../../../../app/theme/reader_theme.dart';
 import '../application/reader_settings_providers.dart';
 import '../domain/reader_settings.dart';
+import '../domain/reading_profile.dart';
 
 /// Bottom-sheet panel for reader + fast-mode settings. Every change writes to
 /// local settings immediately and is reflected live (the sheet watches the
@@ -30,6 +35,23 @@ class ReaderSettingsSheet extends ConsumerWidget {
             Text(l10n.readerSettingsTitle,
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
+            Text(l10n.settingsProfiles),
+            const SizedBox(height: 4),
+            Text(l10n.settingsProfilesHint,
+                style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                for (final profile in ReadingProfile.values)
+                  ActionChip(
+                    label: Text(_profileLabel(l10n, profile)),
+                    onPressed: () => repo.applyProfile(profile),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
             Text(l10n.settingsTheme),
             const SizedBox(height: 8),
             SegmentedButton<ReaderThemeVariant>(
@@ -43,6 +65,24 @@ class ReaderSettingsSheet extends ConsumerWidget {
               ],
               selected: <ReaderThemeVariant>{settings.theme},
               onSelectionChanged: (s) => repo.setTheme(s.first),
+            ),
+            const SizedBox(height: 16),
+            Text(l10n.settingsFontFamily),
+            const SizedBox(height: 8),
+            SegmentedButton<ReaderFontFamily>(
+              segments: <ButtonSegment<ReaderFontFamily>>[
+                ButtonSegment(
+                    value: ReaderFontFamily.system,
+                    label: Text(l10n.fontFamilySystem)),
+                ButtonSegment(
+                    value: ReaderFontFamily.serif,
+                    label: Text(l10n.fontFamilySerif)),
+                ButtonSegment(
+                    value: ReaderFontFamily.monospace,
+                    label: Text(l10n.fontFamilyMonospace)),
+              ],
+              selected: <ReaderFontFamily>{settings.fontFamily},
+              onSelectionChanged: (s) => repo.setFontFamily(s.first),
             ),
             const SizedBox(height: 8),
             _StepperRow(
@@ -84,9 +124,34 @@ class ReaderSettingsSheet extends ConsumerWidget {
             const Divider(height: 24),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
+              title: Text(l10n.settingsPageAnimation),
+              value: settings.pageAnimationEnabled,
+              onChanged: repo.setPageAnimationEnabled,
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.settingsHaptics),
+              value: settings.hapticsEnabled,
+              onChanged: repo.setHapticsEnabled,
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.settingsReducedMotion),
+              value: settings.reducedMotion,
+              onChanged: repo.setReducedMotion,
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
               title: Text(l10n.readerModeLock),
               value: settings.modeLockEnabled,
-              onChanged: repo.setModeLock,
+              // Same haptic as the reader's bottom-bar lock button
+              // (TASK-1007: mode lock toggle).
+              onChanged: (value) {
+                if (settings.hapticsEnabled) {
+                  unawaited(HapticFeedback.selectionClick());
+                }
+                repo.setModeLock(value);
+              },
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -105,6 +170,14 @@ class ReaderSettingsSheet extends ConsumerWidget {
       ),
     );
   }
+
+  String _profileLabel(AppLocalizations l10n, ReadingProfile profile) =>
+      switch (profile) {
+        ReadingProfile.standard => l10n.profileStandard,
+        ReadingProfile.highReadability => l10n.profileHighReadability,
+        ReadingProfile.dyslexia => l10n.profileDyslexia,
+        ReadingProfile.lowVision => l10n.profileLowVision,
+      };
 }
 
 class _StepperRow extends StatelessWidget {

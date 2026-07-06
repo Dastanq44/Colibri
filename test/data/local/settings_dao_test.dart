@@ -15,9 +15,12 @@ void main() {
       final s = await db.settingsDao.getReaderSettings();
 
       expect(s.theme, 'light');
+      expect(s.fontFamily, 'system');
       expect(s.fontSize, 18);
       expect(s.lineHeight, 1.5);
       expect(s.letterSpacing, 0);
+      expect(s.pageAnimation, 'slide');
+      expect(s.hapticsEnabled, isTrue);
       expect(s.modeLockEnabled, isFalse);
       expect(s.speedLockEnabled, isFalse);
       expect(s.autoFastModeEnabled, isTrue);

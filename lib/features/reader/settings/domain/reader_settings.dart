@@ -1,3 +1,4 @@
+import '../../../../app/theme/reader_fonts.dart';
 import '../../../../app/theme/reader_theme.dart';
 import '../../../../data/local/local_defaults.dart';
 
@@ -5,9 +6,12 @@ import '../../../../data/local/local_defaults.dart';
 class ReaderSettings {
   const ReaderSettings({
     required this.theme,
+    required this.fontFamily,
     required this.fontSize,
     required this.lineHeight,
     required this.letterSpacing,
+    required this.pageAnimationEnabled,
+    required this.hapticsEnabled,
     required this.modeLockEnabled,
     required this.speedLockEnabled,
     required this.reducedMotion,
@@ -15,9 +19,12 @@ class ReaderSettings {
   });
 
   final ReaderThemeVariant theme;
+  final ReaderFontFamily fontFamily;
   final int fontSize;
   final double lineHeight;
   final double letterSpacing;
+  final bool pageAnimationEnabled;
+  final bool hapticsEnabled;
   final bool modeLockEnabled;
   final bool speedLockEnabled;
   final bool reducedMotion;
@@ -25,9 +32,12 @@ class ReaderSettings {
 
   factory ReaderSettings.defaults() => const ReaderSettings(
         theme: ReaderThemeVariant.light,
+        fontFamily: ReaderFontFamily.system,
         fontSize: ReaderDefaults.fontSize,
         lineHeight: ReaderDefaults.lineHeight,
         letterSpacing: ReaderDefaults.letterSpacing,
+        pageAnimationEnabled: true,
+        hapticsEnabled: ReaderDefaults.hapticsEnabled,
         modeLockEnabled: ReaderDefaults.modeLockEnabled,
         speedLockEnabled: ReaderDefaults.speedLockEnabled,
         reducedMotion: ReaderDefaults.reducedMotion,

@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/localization/generated/app_localizations.dart';
+import '../../../../app/theme/reader_fonts.dart';
 import '../../../../app/theme/reader_theme.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../settings/application/reader_settings_providers.dart';
@@ -35,11 +37,34 @@ class FastReaderView extends ConsumerStatefulWidget {
 class _FastReaderViewState extends ConsumerState<FastReaderView> {
   String? _feedback;
   Timer? _feedbackTimer;
+  FastModeEngine? _engine;
+  FastModePlaybackState? _lastPlayback;
 
   @override
   void dispose() {
     _feedbackTimer?.cancel();
+    _engine?.removeListener(_onEngineChanged);
     super.dispose();
+  }
+
+  /// Fires [feedback] only when the persisted haptics setting allows it
+  /// (TASK-1007). Fails closed (`?? false`): while settings are still loading
+  /// we must not vibrate against a persisted opt-out.
+  void _haptic(Future<void> Function() feedback) {
+    final enabled =
+        ref.read(readerSettingsProvider).valueOrNull?.hapticsEnabled ?? false;
+    if (enabled) unawaited(feedback());
+  }
+
+  /// Watches for the playback reaching [FastModePlaybackState.completed] so
+  /// finishing the book gets a haptic (listener side-effect, not in build).
+  void _onEngineChanged() {
+    final playback = _engine?.state.playback;
+    if (playback == FastModePlaybackState.completed &&
+        _lastPlayback != FastModePlaybackState.completed) {
+      _haptic(HapticFeedback.mediumImpact);
+    }
+    _lastPlayback = playback;
   }
 
   @override
@@ -64,6 +89,7 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
       return;
     }
     if (engine.decreaseWpm()) {
+      _haptic(HapticFeedback.selectionClick);
       _flash('-${engine.state.settings.step} ${l10n.wpm}');
     }
   }
@@ -74,6 +100,7 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
       return;
     }
     if (engine.increaseWpm()) {
+      _haptic(HapticFeedback.selectionClick);
       _flash('+${engine.state.settings.step} ${l10n.wpm}');
     }
   }
@@ -87,8 +114,17 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final engine = ref.watch(fastModeEngineProvider(widget.bookId));
-    final theme = ref.watch(readerSettingsProvider).valueOrNull?.theme ??
-        ReaderThemeVariant.light;
+    // Idempotent listener swap: track the (possibly recreated) engine for the
+    // completion haptic without doing side effects on every rebuild.
+    if (!identical(_engine, engine)) {
+      _engine?.removeListener(_onEngineChanged);
+      _engine = engine;
+      _lastPlayback = engine.state.playback;
+      engine.addListener(_onEngineChanged);
+    }
+    final readerSettings = ref.watch(readerSettingsProvider).valueOrNull;
+    final theme = readerSettings?.theme ?? ReaderThemeVariant.light;
+    final fontFamily = readerSettings?.fontFamily ?? ReaderFontFamily.system;
     final palette = ReaderPalette.of(theme);
 
     return ListenableBuilder(
@@ -173,7 +209,11 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
                       ),
                       Positioned.fill(
                         child: IgnorePointer(
-                          child: _TokenColumn(state: s, palette: palette),
+                          child: _TokenColumn(
+                            state: s,
+                            palette: palette,
+                            fontFamily: fontFamily,
+                          ),
                         ),
                       ),
                       if (_feedback != null)
@@ -206,15 +246,27 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
 }
 
 class _TokenColumn extends StatelessWidget {
-  const _TokenColumn({required this.state, required this.palette});
+  const _TokenColumn({
+    required this.state,
+    required this.palette,
+    required this.fontFamily,
+  });
 
   final FastModeState state;
   final ReaderPalette palette;
+  final ReaderFontFamily fontFamily;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dim = theme.textTheme.titleMedium?.copyWith(color: palette.dim);
+    final dim = fontFamily.applyTo(
+      (theme.textTheme.titleMedium ?? const TextStyle())
+          .copyWith(color: palette.dim),
+    );
+    final word = fontFamily.applyTo(
+      (theme.textTheme.displaySmall ?? const TextStyle())
+          .copyWith(fontWeight: FontWeight.w600, color: palette.text),
+    );
     final showAdjacent = state.settings.showAdjacentContext;
     return Center(
       child: Column(
@@ -226,8 +278,7 @@ class _TokenColumn extends StatelessWidget {
           Text(
             state.currentToken?.rawText ?? '',
             textAlign: TextAlign.center,
-            style: theme.textTheme.displaySmall
-                ?.copyWith(fontWeight: FontWeight.w600, color: palette.text),
+            style: word,
           ),
           const SizedBox(height: 12),
           if (showAdjacent) Text(state.nextToken?.rawText ?? '', style: dim),
@@ -251,7 +302,12 @@ class _FeedbackChip extends StatelessWidget {
         color: scheme.inverseSurface,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(text, style: TextStyle(color: scheme.onInverseSurface)),
+      // Live region: screen readers announce each transient flash ("+25 WPM",
+      // "Speed locked", "Paused") — the tap zones give no other feedback.
+      child: Semantics(
+        liveRegion: true,
+        child: Text(text, style: TextStyle(color: scheme.onInverseSurface)),
+      ),
     );
   }
 }
@@ -289,16 +345,23 @@ class _FastBottomBar extends StatelessWidget {
               onPressed: onToggleModeLock,
             ),
             Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Text('${state.wpm} ${l10n.wpm}',
-                      style: theme.textTheme.titleMedium
-                          ?.copyWith(color: palette.text)),
-                  Text('${state.progressPercent.round()}%',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: palette.dim)),
-                ],
+              child: Semantics(
+                label:
+                    '${l10n.fastCurrentSpeedLabel}, ${l10n.readerProgressLabel}',
+                value:
+                    '${state.wpm} ${l10n.wpm}, ${state.progressPercent.round()}%',
+                excludeSemantics: true,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Text('${state.wpm} ${l10n.wpm}',
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(color: palette.text)),
+                    Text('${state.progressPercent.round()}%',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: palette.dim)),
+                  ],
+                ),
               ),
             ),
             IconButton(
