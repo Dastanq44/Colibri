@@ -45,7 +45,10 @@ dependencies:
   html: ^0.15.4
 
   # Crash reporting (initialized in Phase 15).
-  sentry_flutter: ^8.3.0
+  # 9.x required: the 8.x plugin's SwiftPM manifest allows any sentry-cocoa 8.x,
+  # and sentry-cocoa >= 8.52 removed internal APIs the 8.x plugin used, breaking
+  # the iOS build. 9.x pins an exact, compatible sentry-cocoa version.
+  sentry_flutter: ^9.23.0
 
   # Analytics SDK (Firebase Analytics or Amplitude) is added in Phase 15.
   # The AnalyticsRepository interface + a no-op default already exist so call
