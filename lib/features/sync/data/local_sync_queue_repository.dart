@@ -8,9 +8,17 @@ import '../domain/sync_operation.dart';
 /// (coalesced) sync work. UI/repositories call these instead of touching the
 /// DAO directly.
 class LocalSyncQueueRepository {
-  LocalSyncQueueRepository(this._db);
+  LocalSyncQueueRepository(this._db, {String? Function()? currentUserId})
+      : _currentUserId = currentUserId ?? _signedOut;
 
   final AppDatabase _db;
+
+  /// Resolves the signed-in user's id at enqueue time. Must return null when
+  /// signed out or when no backend is configured (and never throw). Rows
+  /// enqueued with a null user attach to the first account that syncs them.
+  final String? Function() _currentUserId;
+
+  static String? _signedOut() => null;
 
   Future<void> enqueueBookCreate(String bookId) async {
     final book = await _db.booksDao.getById(bookId);
@@ -87,7 +95,13 @@ class LocalSyncQueueRepository {
     );
   }
 
-  Future<int> pendingCount() => _db.syncQueueDao.pendingCount();
+  Future<int> pendingCount() =>
+      _db.syncQueueDao.pendingCount(userId: _currentUserId());
+
+  /// Live count of this user's not-yet-synced changes (including unstamped
+  /// rows enqueued while signed out).
+  Stream<int> watchPendingCount() =>
+      _db.syncQueueDao.watchPendingCount(userId: _currentUserId());
 
   Future<void> _enqueue(
     SyncEntityType type,
@@ -100,6 +114,7 @@ class LocalSyncQueueRepository {
       entityId: entityId,
       operation: op.wire,
       payloadJson: jsonEncode(payload),
+      userId: _currentUserId(),
     );
   }
 }

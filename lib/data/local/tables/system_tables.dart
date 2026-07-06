@@ -10,6 +10,11 @@ class SyncQueue extends Table {
   TextColumn get entityId => text()();
   TextColumn get operation => text()(); // 'create' | 'update' | 'delete' | 'upload_file'
   TextColumn get payloadJson => text().withDefault(const Constant('{}'))();
+
+  /// The signed-in user the change belongs to, stamped at enqueue time.
+  /// Null for changes made while signed out (or with no backend configured);
+  /// such rows attach to the first account that syncs them.
+  TextColumn get userId => text().nullable()();
   IntColumn get attemptCount => integer().withDefault(const Constant(0))();
   TextColumn get lastAttemptAt => text().nullable()();
   TextColumn get nextAttemptAt => text().nullable()();

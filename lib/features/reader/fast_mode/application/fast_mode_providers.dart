@@ -43,8 +43,14 @@ final fastModeEngineProvider =
     engine.applySettings(next);
   });
 
-  ref.onDispose(engine.dispose);
-  _loadFastMode(ref, bookId, engine);
+  // _loadFastMode can outlive this element (book closed mid-load); the flag
+  // lets it bail instead of touching the disposed engine or ref.
+  var disposed = false;
+  ref.onDispose(() {
+    disposed = true;
+    engine.dispose();
+  });
+  _loadFastMode(ref, bookId, engine, () => disposed);
   return engine;
 });
 
@@ -52,9 +58,12 @@ Future<void> _loadFastMode(
   Ref ref,
   String bookId,
   FastModeEngine engine,
+  bool Function() isDisposed,
 ) async {
   final repo = ref.read(readerRepositoryProvider);
-  switch (await repo.openBook(bookId)) {
+  final opened = await repo.openBook(bookId);
+  if (isDisposed()) return;
+  switch (opened) {
     case Err():
       engine.fail(FastModeError.unavailable);
     case Ok(value: final doc):
@@ -66,8 +75,9 @@ Future<void> _loadFastMode(
         return;
       }
       var startIndex = 0;
-      if (await repo.getSavedLocator(bookId)
-          case Ok(value: final ReaderLocator loc)) {
+      final saved = await repo.getSavedLocator(bookId);
+      if (isDisposed()) return;
+      if (saved case Ok(value: final ReaderLocator loc)) {
         startIndex = _resolveStartIndex(tokens, loc);
       }
       engine.loadTokens(tokens, startIndex: startIndex);

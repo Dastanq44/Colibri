@@ -17,4 +17,22 @@ void main() {
     expect(container.read(isSignedInProvider), isFalse);
     expect(await container.read(authStateChangesProvider.future), isNull);
   });
+
+  test('backendConfiguredProvider mirrors the data-layer configured flag', () {
+    final unconfigured = ProviderContainer(
+      overrides: <Override>[
+        supabaseClientProvider.overrideWithValue(null),
+      ],
+    );
+    addTearDown(unconfigured.dispose);
+    expect(unconfigured.read(backendConfiguredProvider), isFalse);
+
+    final configured = ProviderContainer(
+      overrides: <Override>[
+        supabaseConfiguredProvider.overrideWithValue(true),
+      ],
+    );
+    addTearDown(configured.dispose);
+    expect(configured.read(backendConfiguredProvider), isTrue);
+  });
 }

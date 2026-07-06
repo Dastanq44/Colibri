@@ -11,6 +11,7 @@ import '../../../data/repositories/sync_repository.dart';
 import '../domain/sync_entity_type.dart';
 import '../domain/sync_operation.dart';
 import '../domain/sync_result.dart';
+import 'sync_error_classifier.dart';
 import 'sync_payloads.dart';
 
 /// Processes the local sync queue against Supabase. Dev-safe: returns a typed
@@ -32,7 +33,7 @@ class SupabaseSyncRepository implements SyncRepository {
   Stream<bool> syncing() => _syncing.stream;
 
   @override
-  Future<Result<SyncRunResult>> syncNow() async {
+  Future<Result<SyncRunResult>> syncNow({bool retryFailed = false}) async {
     final client = _client;
     if (client == null) return const Err(BackendUnavailableFailure());
     final userId = client.auth.currentUser?.id;
@@ -45,26 +46,65 @@ class SupabaseSyncRepository implements SyncRepository {
     var succeeded = 0;
     var failed = 0;
     try {
-      final items = await _db.syncQueueDao.getRunnablePending(limit: 50);
+      // Exactly one in-process sync pass runs at a time (SyncController's
+      // SyncRunning state rejects re-entry), so any `processing` row seen
+      // here was stranded by a previous run that died mid-flight. Requeue
+      // them so one-shot operations (book create, file upload) are not lost.
+      await _db.syncQueueDao.requeueProcessing();
+
+      // A user-initiated pass gives permanently `failed` items a fresh
+      // attempt budget; automatic passes keep skipping them.
+      if (retryFailed) {
+        await _db.syncQueueDao.requeueFailed(userId: userId);
+      }
+
+      // Atomic claim: rows flip to `processing` in the same transaction that
+      // selects them, so a save arriving mid-flight inserts a fresh pending
+      // row instead of mutating one we already snapshotted — markDone can no
+      // longer discard newer data. Only this user's rows (or unstamped ones)
+      // are picked up.
+      final items = await _db.syncQueueDao
+          .claimRunnablePending(userId: userId, limit: 50);
       for (final item in items) {
         processed++;
-        await _db.syncQueueDao.markProcessing(item.id);
         try {
           await _processItem(client, userId, item);
-          await _db.syncQueueDao.markDone(item.id);
+          // Stamping on success (not at claim) is what binds signed-out rows
+          // to the account that actually synced them.
+          await _db.syncQueueDao.markDone(item.id, userId: userId);
           succeeded++;
-        } catch (_) {
+        } catch (e) {
           // No private content is logged.
-          await _db.syncQueueDao
-              .markFailed(item.id, retryAfter: _backoff(item.attemptCount));
+          if (isTransientSyncError(e)) {
+            // Offline/backend hiccup: retry later without consuming the
+            // permanent-failure attempt budget.
+            await _db.syncQueueDao.markRetryLater(
+              item.id,
+              retryAfter: _backoff(item.attemptCount),
+            );
+          } else {
+            await _db.syncQueueDao.markFailed(
+              item.id,
+              retryAfter: _backoff(item.attemptCount),
+            );
+          }
           failed++;
         }
       }
+
+      // Housekeeping: completed rows are kept for a week (debugging aid),
+      // then pruned so the queue table cannot grow without bound.
+      await _db.syncQueueDao.deleteDoneOlderThan(const Duration(days: 7));
+
       return Ok(SyncRunResult(
         processed: processed,
         succeeded: succeeded,
         failed: failed,
       ));
+    } catch (_) {
+      // Preserve the Result contract: unexpected errors (queue DB failures,
+      // bugs) become a typed failure instead of escaping to the caller.
+      return const Err(UnknownFailure('Sync failed.'));
     } finally {
       _setSyncing(false);
     }

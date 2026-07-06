@@ -135,6 +135,27 @@ void main() {
     expect(saved.locatorValue, '42');
   });
 
+  test('concurrent saves keep revisions strictly monotonic', () async {
+    await seedBook('b1', format: 'txt', content: 'hello world');
+
+    // Overlapping saves are real: page turns persist fire-and-forget and the
+    // fast engine checkpoints on a timer. Each save must get its own revision.
+    await Future.wait(<Future<void>>[
+      for (var i = 0; i < 10; i++)
+        repo.saveLocator(
+          'b1',
+          ReaderLocator(
+            locatorType: 'text_offset',
+            locatorValue: '$i',
+            percent: i.toDouble(),
+          ),
+        ),
+    ]);
+
+    final row = await db.progressDao.getByBookId('b1');
+    expect(row!.revision, 10);
+  });
+
   test('opening a book stamps shelf last-opened and enqueues a bookshelf item',
       () async {
     await seedBook('b1', format: 'txt', content: 'hello');

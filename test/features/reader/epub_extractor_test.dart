@@ -4,14 +4,57 @@ import 'package:archive/archive.dart';
 import 'package:colibri/features/reader/data/epub_extractor.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-List<int> _zip(Map<String, String> files) {
+List<int> _zip(Map<String, String> files) =>
+    _zipBytes(files.map((name, content) => MapEntry(name, utf8.encode(content))));
+
+List<int> _zipBytes(Map<String, List<int>> files) {
   final archive = Archive();
-  files.forEach((name, content) {
-    final bytes = utf8.encode(content);
+  files.forEach((name, bytes) {
     archive.addFile(ArchiveFile(name, bytes.length, bytes));
   });
   return ZipEncoder().encode(archive)!;
 }
+
+/// Encodes [text] as windows-1251 (ASCII + basic Cyrillic, enough for tests).
+List<int> _cp1251(String text) => text.codeUnits.map((c) {
+      if (c < 0x80) return c;
+      if (c >= 0x0410 && c <= 0x044F) return c - 0x350; // А..я
+      if (c == 0x0401) return 0xA8; // Ё
+      if (c == 0x0451) return 0xB8; // ё
+      throw ArgumentError('char not supported by test cp1251 encoder: $c');
+    }).toList();
+
+List<int> _utf16le(String text, {bool bom = true}) {
+  final out = <int>[if (bom) 0xFF, if (bom) 0xFE];
+  for (final u in text.codeUnits) {
+    out
+      ..add(u & 0xFF)
+      ..add((u >> 8) & 0xFF);
+  }
+  return out;
+}
+
+List<int> _utf16be(String text, {bool bom = true}) {
+  final out = <int>[if (bom) 0xFE, if (bom) 0xFF];
+  for (final u in text.codeUnits) {
+    out
+      ..add((u >> 8) & 0xFF)
+      ..add(u & 0xFF);
+  }
+  return out;
+}
+
+/// OPF with a single-chapter manifest/spine using the given [href].
+String _opfWithHref(String href) => '''
+<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+  <manifest>
+    <item id="c1" href="$href" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="c1"/>
+  </spine>
+</package>''';
 
 const _containerXml = '''
 <?xml version="1.0"?>
@@ -91,5 +134,172 @@ void main() {
 
   test('malformed (non-zip) bytes return null', () {
     expect(extractor.extract(utf8.encode('this is not a zip')), isNull);
+  });
+
+  group('percent-encoded hrefs', () {
+    test('href with %20 resolves to zip entry with a space', () {
+      final bytes = _zip(<String, String>{
+        'META-INF/container.xml': _containerXml,
+        'OEBPS/content.opf': _opfWithHref('Chapter%201.xhtml'),
+        'OEBPS/Chapter 1.xhtml':
+            '<html><body><p>Space in name.</p></body></html>',
+      });
+
+      final result = extractor.extract(bytes);
+      expect(result, isNotNull);
+      expect(result!.chapters.length, 1);
+      expect(result.chapters[0].text, contains('Space in name'));
+    });
+
+    test('percent-encoded non-ASCII href resolves to UTF-8 entry name', () {
+      final bytes = _zip(<String, String>{
+        'META-INF/container.xml': _containerXml,
+        'OEBPS/content.opf':
+            _opfWithHref('%D0%93%D0%BB%D0%B0%D0%B2%D0%B0.xhtml'), // Глава
+        'OEBPS/Глава.xhtml': '<html><body><p>Кириллица.</p></body></html>',
+      });
+
+      final result = extractor.extract(bytes);
+      expect(result, isNotNull);
+      expect(result!.chapters.length, 1);
+      expect(result.chapters[0].text, contains('Кириллица'));
+    });
+
+    test('falls back to the raw href when the entry is stored encoded', () {
+      final bytes = _zip(<String, String>{
+        'META-INF/container.xml': _containerXml,
+        'OEBPS/content.opf': _opfWithHref('Chapter%201.xhtml'),
+        'OEBPS/Chapter%201.xhtml':
+            '<html><body><p>Still encoded.</p></body></html>',
+      });
+
+      final result = extractor.extract(bytes);
+      expect(result, isNotNull);
+      expect(result!.chapters.length, 1);
+      expect(result.chapters[0].text, contains('Still encoded'));
+    });
+
+    test('invalid percent sequence falls back to the raw href', () {
+      final bytes = _zip(<String, String>{
+        'META-INF/container.xml': _containerXml,
+        'OEBPS/content.opf': _opfWithHref('Bad%ZZname.xhtml'),
+        'OEBPS/Bad%ZZname.xhtml':
+            '<html><body><p>Raw survives.</p></body></html>',
+      });
+
+      final result = extractor.extract(bytes);
+      expect(result, isNotNull);
+      expect(result!.chapters.length, 1);
+      expect(result.chapters[0].text, contains('Raw survives'));
+    });
+
+    test('fragment in href is stripped before lookup', () {
+      final bytes = _zip(<String, String>{
+        'META-INF/container.xml': _containerXml,
+        'OEBPS/content.opf': _opfWithHref('chapter1.xhtml#section2'),
+        'OEBPS/chapter1.xhtml':
+            '<html><body><p>Fragment ignored.</p></body></html>',
+      });
+
+      final result = extractor.extract(bytes);
+      expect(result, isNotNull);
+      expect(result!.chapters.length, 1);
+      expect(result.chapters[0].text, contains('Fragment ignored'));
+    });
+  });
+
+  group('chapter encodings', () {
+    List<int> epubWithChapterBytes(List<int> chapterBytes) =>
+        _zipBytes(<String, List<int>>{
+          'META-INF/container.xml': utf8.encode(_containerXml),
+          'OEBPS/content.opf': utf8.encode(_opfWithHref('chapter1.xhtml')),
+          'OEBPS/chapter1.xhtml': chapterBytes,
+        });
+
+    test('windows-1251 chapter with XML declaration decodes to Cyrillic', () {
+      final bytes = epubWithChapterBytes(_cp1251(
+        '<?xml version="1.0" encoding="windows-1251"?>'
+        '<html><body><p>Привет, мир! Ёжик, ёлка.</p></body></html>',
+      ));
+
+      final result = extractor.extract(bytes);
+      expect(result, isNotNull);
+      expect(result!.chapters.length, 1);
+      expect(result.chapters[0].text, contains('Привет, мир!'));
+      expect(result.chapters[0].text, contains('Ёжик, ёлка.'));
+      expect(result.chapters[0].text, isNot(contains('�')));
+    });
+
+    test('UTF-16LE chapter with BOM decodes correctly', () {
+      final bytes = epubWithChapterBytes(_utf16le(
+        '<?xml version="1.0" encoding="utf-16"?>'
+        '<html><body><p>Привет UTF-16 🚀</p></body></html>',
+      ));
+
+      final result = extractor.extract(bytes);
+      expect(result, isNotNull);
+      expect(result!.chapters.length, 1);
+      expect(result.chapters[0].text, contains('Привет UTF-16 🚀'));
+    });
+
+    test('UTF-16BE chapter with BOM decodes correctly', () {
+      final bytes = epubWithChapterBytes(_utf16be(
+        '<html><body><p>Big endian текст</p></body></html>',
+      ));
+
+      final result = extractor.extract(bytes);
+      expect(result, isNotNull);
+      expect(result!.chapters.length, 1);
+      expect(result.chapters[0].text, contains('Big endian текст'));
+    });
+
+    test('BOM-less UTF-16LE chapter with XML declaration decodes', () {
+      final bytes = epubWithChapterBytes(_utf16le(
+        '<?xml version="1.0" encoding="utf-16le"?>'
+        '<html><body><p>Без BOM</p></body></html>',
+        bom: false,
+      ));
+
+      final result = extractor.extract(bytes);
+      expect(result, isNotNull);
+      expect(result!.chapters.length, 1);
+      expect(result.chapters[0].text, contains('Без BOM'));
+    });
+
+    test('iso-8859-1 chapter with XML declaration decodes', () {
+      final bytes = epubWithChapterBytes(latin1.encode(
+        '<?xml version="1.0" encoding="ISO-8859-1"?>'
+        '<html><body><p>Café niño</p></body></html>',
+      ));
+
+      final result = extractor.extract(bytes);
+      expect(result, isNotNull);
+      expect(result!.chapters.length, 1);
+      expect(result.chapters[0].text, contains('Café niño'));
+    });
+
+    test('UTF-8 chapter with BOM decodes without a leading BOM char', () {
+      final bytes = epubWithChapterBytes(<int>[
+        0xEF, 0xBB, 0xBF,
+        ...utf8.encode('<html><body><p>BOM UTF-8 текст</p></body></html>'),
+      ]);
+
+      final result = extractor.extract(bytes);
+      expect(result, isNotNull);
+      expect(result!.chapters.length, 1);
+      expect(result.chapters[0].text, contains('BOM UTF-8 текст'));
+      expect(result.chapters[0].text, isNot(contains('﻿')));
+    });
+
+    test('undeclared UTF-8 chapter still decodes (fallback path)', () {
+      final bytes = epubWithChapterBytes(
+        utf8.encode('<html><body><p>Обычный UTF-8</p></body></html>'),
+      );
+
+      final result = extractor.extract(bytes);
+      expect(result, isNotNull);
+      expect(result!.chapters.length, 1);
+      expect(result.chapters[0].text, contains('Обычный UTF-8'));
+    });
   });
 }

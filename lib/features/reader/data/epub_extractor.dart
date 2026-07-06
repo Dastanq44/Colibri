@@ -66,8 +66,7 @@ class EpubExtractor {
         if (idref == null) continue;
         final href = manifest[idref];
         if (href == null) continue;
-        final path = p.url.normalize(p.url.join(baseDir, href));
-        final html = _readText(archive, path);
+        final html = _chapterHtml(archive, baseDir, href);
         if (html == null) continue;
         final text = _htmlToText(html);
         if (text.trim().isEmpty) continue;
@@ -112,6 +111,28 @@ class EpubExtractor {
     return null;
   }
 
+  /// Manifest hrefs are URIs: strip any fragment and percent-decode before
+  /// resolving against the OPF directory ("Chapter%201.xhtml" → zip entry
+  /// "Chapter 1.xhtml"). Falls back to the raw href for archives whose entry
+  /// names are stored still-encoded.
+  String? _chapterHtml(Archive archive, String baseDir, String href) {
+    final hash = href.indexOf('#');
+    final raw = hash >= 0 ? href.substring(0, hash) : href;
+    String decoded;
+    try {
+      decoded = Uri.decodeFull(raw);
+    } on FormatException {
+      decoded = raw;
+    } on ArgumentError {
+      // Uri.decodeFull throws ArgumentError on invalid percent-encodings.
+      decoded = raw;
+    }
+    final html =
+        _readText(archive, p.url.normalize(p.url.join(baseDir, decoded)));
+    if (html != null || decoded == raw) return html;
+    return _readText(archive, p.url.normalize(p.url.join(baseDir, raw)));
+  }
+
   String? _readText(Archive archive, String path) {
     ArchiveFile? found;
     for (final file in archive.files) {
@@ -131,9 +152,107 @@ class EpubExtractor {
     }
     if (found == null || !found.isFile) return null;
     final content = found.content;
-    if (content is List<int>) return utf8.decode(content, allowMalformed: true);
+    if (content is List<int>) return _decodeBytes(content);
     return null;
   }
+
+  /// Decodes chapter/OPF bytes: BOM first, then the XML declaration's
+  /// `encoding` attribute, then lenient UTF-8 as a last resort.
+  String _decodeBytes(List<int> bytes) {
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xEF &&
+        bytes[1] == 0xBB &&
+        bytes[2] == 0xBF) {
+      return utf8.decode(bytes.sublist(3), allowMalformed: true);
+    }
+    if (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) {
+      return _decodeUtf16(bytes, 2, littleEndian: true);
+    }
+    if (bytes.length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF) {
+      return _decodeUtf16(bytes, 2, littleEndian: false);
+    }
+    switch (_declaredEncoding(bytes)) {
+      case 'utf-16le':
+        return _decodeUtf16(bytes, 0, littleEndian: true);
+      case 'utf-16be':
+        return _decodeUtf16(bytes, 0, littleEndian: false);
+      case 'utf-16':
+        // No BOM: sniff byte order from the leading '<' of the declaration.
+        return _decodeUtf16(bytes, 0, littleEndian: bytes[0] != 0x00);
+      case 'windows-1251':
+      case 'cp1251':
+        return _decodeWindows1251(bytes);
+      case 'iso-8859-1':
+      case 'latin1':
+      case 'latin-1':
+        return latin1.decode(bytes);
+    }
+    return utf8.decode(bytes, allowMalformed: true);
+  }
+
+  /// Reads the `encoding` attribute of an `<?xml ...?>` declaration from the
+  /// first bytes, treated as ASCII-compatible. NUL bytes are skipped so
+  /// BOM-less UTF-16 declarations are still readable.
+  String? _declaredEncoding(List<int> bytes) {
+    final limit = bytes.length < 1024 ? bytes.length : 1024;
+    final head = StringBuffer();
+    for (var i = 0; i < limit; i++) {
+      final b = bytes[i];
+      if (b == 0x00) continue;
+      head.writeCharCode(b < 0x80 ? b : 0x3F);
+    }
+    // Anchored: an XML declaration is only valid at the document start.
+    // Matching anywhere would let declaration-looking strings in comments or
+    // CDATA mis-decode an otherwise plain UTF-8 chapter.
+    final decl =
+        RegExp(r'^\s*<\?xml[^>]*\?>').firstMatch(head.toString());
+    if (decl == null) return null;
+    final enc = RegExp('encoding\\s*=\\s*["\']([^"\']+)["\']',
+            caseSensitive: false)
+        .firstMatch(decl.group(0)!);
+    return enc?.group(1)?.trim().toLowerCase();
+  }
+
+  String _decodeUtf16(List<int> bytes, int start, {required bool littleEndian}) {
+    final units = <int>[];
+    for (var i = start; i + 1 < bytes.length; i += 2) {
+      units.add(littleEndian
+          ? bytes[i] | (bytes[i + 1] << 8)
+          : (bytes[i] << 8) | bytes[i + 1]);
+    }
+    return String.fromCharCodes(units);
+  }
+
+  String _decodeWindows1251(List<int> bytes) {
+    final units = List<int>.generate(
+      bytes.length,
+      (i) {
+        final b = bytes[i] & 0xFF;
+        return b < 0x80 ? b : _cp1251HighBytes[b - 0x80];
+      },
+    );
+    return String.fromCharCodes(units);
+  }
+
+  /// windows-1251 high bytes 0x80–0xFF → Unicode code points.
+  static const List<int> _cp1251HighBytes = <int>[
+    0x0402, 0x0403, 0x201A, 0x0453, 0x201E, 0x2026, 0x2020, 0x2021, // 0x80
+    0x20AC, 0x2030, 0x0409, 0x2039, 0x040A, 0x040C, 0x040B, 0x040F, // 0x88
+    0x0452, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014, // 0x90
+    0x0098, 0x2122, 0x0459, 0x203A, 0x045A, 0x045C, 0x045B, 0x045F, // 0x98
+    0x00A0, 0x040E, 0x045E, 0x0408, 0x00A4, 0x0490, 0x00A6, 0x00A7, // 0xA0
+    0x0401, 0x00A9, 0x0404, 0x00AB, 0x00AC, 0x00AD, 0x00AE, 0x0407, // 0xA8
+    0x00B0, 0x00B1, 0x0406, 0x0456, 0x0491, 0x00B5, 0x00B6, 0x00B7, // 0xB0
+    0x0451, 0x2116, 0x0454, 0x00BB, 0x0458, 0x0405, 0x0455, 0x0457, // 0xB8
+    0x0410, 0x0411, 0x0412, 0x0413, 0x0414, 0x0415, 0x0416, 0x0417, // 0xC0
+    0x0418, 0x0419, 0x041A, 0x041B, 0x041C, 0x041D, 0x041E, 0x041F, // 0xC8
+    0x0420, 0x0421, 0x0422, 0x0423, 0x0424, 0x0425, 0x0426, 0x0427, // 0xD0
+    0x0428, 0x0429, 0x042A, 0x042B, 0x042C, 0x042D, 0x042E, 0x042F, // 0xD8
+    0x0430, 0x0431, 0x0432, 0x0433, 0x0434, 0x0435, 0x0436, 0x0437, // 0xE0
+    0x0438, 0x0439, 0x043A, 0x043B, 0x043C, 0x043D, 0x043E, 0x043F, // 0xE8
+    0x0440, 0x0441, 0x0442, 0x0443, 0x0444, 0x0445, 0x0446, 0x0447, // 0xF0
+    0x0448, 0x0449, 0x044A, 0x044B, 0x044C, 0x044D, 0x044E, 0x044F, // 0xF8
+  ];
 
   String _htmlToText(String html) {
     final document = html_parser.parse(html);

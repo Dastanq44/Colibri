@@ -152,29 +152,34 @@ class LocalReaderRepository implements ReaderRepository {
   }) async {
     try {
       final deviceId = await _deviceIdService.getOrCreate();
-      final existing = await _db.progressDao.getByBookId(bookId);
-      final nextRevision = (existing?.revision ?? 0) + 1;
+      // One transaction: keeps the read-increment-write atomic (revisions stay
+      // strictly monotonic under concurrent saves) and the queued snapshot
+      // consistent with the row it was built from.
+      await _db.transaction(() async {
+        final existing = await _db.progressDao.getByBookId(bookId);
+        final nextRevision = (existing?.revision ?? 0) + 1;
 
-      await _db.progressDao.saveProgress(
-        LocalReadingProgressCompanion.insert(
-          bookId: bookId,
-          deviceId: deviceId,
-          locatorType: Value(locator.locatorType),
-          locatorValue: Value(locator.locatorValue),
-          chapterIndex: Value(locator.chapterIndex),
-          pageNumber: Value(locator.pageNumber),
-          paragraphIndex: Value(locator.paragraphIndex),
-          tokenIndex: Value(locator.tokenIndex),
-          percent: Value(locator.percent),
-          mode: Value(mode.wire),
-          revision: Value(nextRevision),
-          updatedAt: Value(_nowIso()),
-          syncStatus: const Value(SyncStatus.pendingUpdate),
-        ),
-      );
-      // Coalesced: one pending reading_progress item per book (fast-mode
-      // playback won't create hundreds of queue rows).
-      await _sync.enqueueProgressUpdate(bookId);
+        await _db.progressDao.saveProgress(
+          LocalReadingProgressCompanion.insert(
+            bookId: bookId,
+            deviceId: deviceId,
+            locatorType: Value(locator.locatorType),
+            locatorValue: Value(locator.locatorValue),
+            chapterIndex: Value(locator.chapterIndex),
+            pageNumber: Value(locator.pageNumber),
+            paragraphIndex: Value(locator.paragraphIndex),
+            tokenIndex: Value(locator.tokenIndex),
+            percent: Value(locator.percent),
+            mode: Value(mode.wire),
+            revision: Value(nextRevision),
+            updatedAt: Value(_nowIso()),
+            syncStatus: const Value(SyncStatus.pendingUpdate),
+          ),
+        );
+        // Coalesced: one pending reading_progress item per book (fast-mode
+        // playback won't create hundreds of queue rows).
+        await _sync.enqueueProgressUpdate(bookId);
+      });
       return const Ok(null);
     } catch (e) {
       return Err(StorageFailure(e.toString()));

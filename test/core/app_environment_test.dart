@@ -12,9 +12,23 @@ void main() {
       expect(AppEnvironment.fromName('Production'), AppEnvironment.production);
     });
 
-    test('falls back to dev for unknown values', () {
+    test('falls back to dev for missing/empty values', () {
       expect(AppEnvironment.fromName(''), AppEnvironment.dev);
-      expect(AppEnvironment.fromName('nonsense'), AppEnvironment.dev);
+      expect(AppEnvironment.fromName('   '), AppEnvironment.dev);
+    });
+
+    test('throws on unrecognized non-empty values (fail-fast on typos)', () {
+      expect(
+        () => AppEnvironment.fromName('produciton'),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.toString(),
+            'message',
+            allOf(contains('produciton'), contains('production')),
+          ),
+        ),
+      );
+      expect(() => AppEnvironment.fromName('prd'), throwsArgumentError);
     });
 
     test('convenience getters are consistent', () {

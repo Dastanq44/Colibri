@@ -6,7 +6,6 @@ import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
 import '../../../core/errors/failures.dart';
 import '../../../core/result/result.dart';
-import '../../../data/remote/supabase_client_provider.dart';
 import '../application/auth_providers.dart';
 
 enum _AuthMode { signIn, signUp, forgot }
@@ -126,7 +125,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final backendConfigured = ref.watch(supabaseConfiguredProvider);
+    final backendConfigured = ref.watch(backendConfiguredProvider);
     final showPassword = _mode != _AuthMode.forgot;
     final showDisplayName = _mode == _AuthMode.signUp;
 

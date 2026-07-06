@@ -101,6 +101,9 @@ class LocalImportRepository implements ImportRepository {
     final format = file.format ?? _validator.formatForFileName(file.fileName);
     if (format == null) return const Err(UnsupportedFormatFailure());
 
+    // Set once the source file has been copied, so every later failure path
+    // can remove the otherwise-unreachable books/<bookId>/ folder.
+    String? copiedBookId;
     try {
       // Duplicate detection by content checksum.
       final checksum = await _checksum.sha256OfFile(source);
@@ -118,8 +121,11 @@ class LocalImportRepository implements ImportRepository {
           fileName: file.fileName,
         );
       } catch (_) {
+        // A failed copy can still leave a partial destination file behind.
+        await _deleteStorageQuietly(bookId);
         return const Err(StorageFailure('Could not copy the file.'));
       }
+      copiedBookId = bookId;
 
       final meta = _metadata.extract(fileName: file.fileName, format: format);
 
@@ -154,7 +160,8 @@ class LocalImportRepository implements ImportRepository {
       final deviceId = await _deviceIdService.getOrCreate();
 
       try {
-        // All three local writes succeed or none do.
+        // Entity rows and their sync-outbox rows commit atomically: all
+        // local writes succeed or none do.
         await _db.transaction(() async {
           await _db.booksDao.upsertBook(
             LocalBooksCompanion.insert(
@@ -184,18 +191,20 @@ class LocalImportRepository implements ImportRepository {
               deviceId: deviceId,
             ),
           );
+          // Enqueue cloud sync work (processed only on manual sign-in +
+          // sync) inside the same transaction, so an enqueue failure rolls
+          // the import back and a committed book always has its outbox rows.
+          await _sync.enqueueBookCreate(bookId);
+          await _sync.enqueueBookFileUpload(bookId);
+          await _sync.enqueueBookshelf(bookId, operation: SyncOperation.create);
         });
       } catch (e) {
         // Transaction rolled back; remove the copied file so a failed import
         // leaves no orphan.
-        await _storage.deleteBookStorage(bookId);
+        await _deleteStorageQuietly(bookId);
         return Err(StorageFailure('Could not save the book (${e.runtimeType}).'));
       }
-
-      // Enqueue cloud sync work (processed only on manual sign-in + sync).
-      await _sync.enqueueBookCreate(bookId);
-      await _sync.enqueueBookFileUpload(bookId);
-      await _sync.enqueueBookshelf(bookId, operation: SyncOperation.create);
+      copiedBookId = null; // Committed — the book now owns its folder.
 
       return Ok(
         ImportedBook(
@@ -206,7 +215,18 @@ class LocalImportRepository implements ImportRepository {
         ),
       );
     } catch (e) {
+      if (copiedBookId != null) await _deleteStorageQuietly(copiedBookId);
       return Err(UnknownFailure(e.toString()));
+    }
+  }
+
+  /// Best-effort removal of a failed import's storage folder. The bookId is
+  /// never recorded on failure paths, so leftover files would be unreachable.
+  Future<void> _deleteStorageQuietly(String bookId) async {
+    try {
+      await _storage.deleteBookStorage(bookId);
+    } catch (_) {
+      // Cleanup must never mask the original failure.
     }
   }
 }

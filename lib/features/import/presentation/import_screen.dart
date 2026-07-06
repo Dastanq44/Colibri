@@ -51,6 +51,7 @@ class ImportScreen extends ConsumerWidget {
         FileTooLargeFailure() => l10n.importErrorTooLarge,
         FileMissingFailure() => l10n.importErrorMissing,
         DuplicateFailure() => l10n.importErrorDuplicate,
+        EmptyBookFailure() => l10n.readerEmpty,
         _ => l10n.importErrorGeneric,
       };
 }

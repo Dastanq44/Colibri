@@ -29,3 +29,9 @@ final currentUserIdProvider = Provider<String?>((ref) {
 final isSignedInProvider = Provider<bool>((ref) {
   return ref.watch(currentUserProvider) != null;
 });
+
+/// Whether a Supabase backend is configured this run. Application-layer view
+/// of the data-layer flag so presentation code never imports `data/remote`.
+final backendConfiguredProvider = Provider<bool>((ref) {
+  return ref.watch(supabaseConfiguredProvider);
+});

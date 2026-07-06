@@ -68,6 +68,40 @@ void main() {
     expect(e.state.playback, FastModePlaybackState.completed);
   });
 
+  test('play after completion restarts from the first token', () {
+    final e = _engine();
+    e.loadTokens(_tokens(2));
+    e.play();
+    e.goToNextToken(); // -> index 1 (last)
+    e.goToNextToken(); // at last -> completed
+    expect(e.state.playback, FastModePlaybackState.completed);
+
+    e.play();
+    expect(e.state.playback, FastModePlaybackState.playing);
+    expect(e.state.currentTokenIndex, 0);
+    expect(e.state.isPlaying, isTrue); // no misleading 'Paused' feedback
+  });
+
+  test('togglePlayPause from completed restarts playback', () {
+    final e = _engine();
+    e.loadTokens(_tokens(2));
+    e.play();
+    e.goToNextToken();
+    e.goToNextToken(); // completed
+    e.togglePlayPause(); // center tap at end of book
+    expect(e.state.isPlaying, isTrue);
+    expect(e.state.currentTokenIndex, 0);
+  });
+
+  test('dispose does not persist the position', () {
+    var saves = 0;
+    final e = FastModeEngine(onSavePosition: (_, __) async => saves++);
+    e.loadTokens(_tokens(3), startIndex: 1);
+    final before = saves;
+    e.dispose();
+    expect(saves, before);
+  });
+
   test('WPM respects 150–700 bounds and step', () {
     final e = _engine();
     e.loadTokens(_tokens(3));

@@ -21,6 +21,11 @@ class BookFileValidator {
     if (formatForFileName(preview.fileName) == null) {
       return const UnsupportedFormatFailure();
     }
+    // Zero-byte files have no readable text; rejecting them here also avoids
+    // a bogus duplicate match downstream (all empty files share one SHA-256).
+    if (preview.sizeBytes <= 0) {
+      return const EmptyBookFailure();
+    }
     if (preview.sizeBytes > maxFileSizeBytes) {
       return const FileTooLargeFailure();
     }

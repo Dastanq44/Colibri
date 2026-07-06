@@ -116,7 +116,7 @@ void main() {
   });
 
   group('SyncQueueDao', () {
-    test('enqueues and reads pending items', () async {
+    test('enqueues and claims pending items', () async {
       await db.syncQueueDao.enqueue(
         SyncQueueCompanion.insert(
           id: 'q1',
@@ -126,11 +126,12 @@ void main() {
         ),
       );
 
-      final pending = await db.syncQueueDao.getRunnablePending();
-      expect(pending, hasLength(1));
-      expect(pending.first.entityId, 'b1');
-      expect(pending.first.status, 'pending');
-      expect(pending.first.attemptCount, 0);
+      final claimed =
+          await db.syncQueueDao.claimRunnablePending(userId: 'user-1');
+      expect(claimed, hasLength(1));
+      expect(claimed.first.entityId, 'b1');
+      expect(claimed.first.status, 'processing');
+      expect(claimed.first.attemptCount, 0);
     });
   });
 }

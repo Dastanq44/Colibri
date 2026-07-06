@@ -35,4 +35,15 @@ void main() {
         preview('book.txt', size: BookFileValidator.maxFileSizeBytes + 1);
     expect(validator.validatePreview(tooBig), isA<FileTooLargeFailure>());
   });
+
+  test('rejects zero-byte files', () {
+    expect(
+      validator.validatePreview(preview('book.txt', size: 0)),
+      isA<EmptyBookFailure>(),
+    );
+    expect(
+      validator.validatePreview(preview('book.pdf', size: 0)),
+      isA<EmptyBookFailure>(),
+    );
+  });
 }

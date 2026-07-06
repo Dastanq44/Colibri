@@ -71,8 +71,14 @@ class FastModeEngine extends ChangeNotifier {
         _state.playback == FastModePlaybackState.error) {
       return;
     }
-    if (_state.playback == FastModePlaybackState.completed) return;
-    _set(_state.copyWith(playback: FastModePlaybackState.playing));
+    // Completed: restart from the first token (end of book is not a dead end).
+    final index = _state.playback == FastModePlaybackState.completed
+        ? 0
+        : _state.currentTokenIndex;
+    _set(_state.copyWith(
+      currentTokenIndex: index,
+      playback: FastModePlaybackState.playing,
+    ));
     _startTimer();
   }
 

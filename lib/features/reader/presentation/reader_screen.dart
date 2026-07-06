@@ -8,6 +8,7 @@ import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/theme/reader_theme.dart';
 import '../../../core/constants/app_constants.dart';
 import '../application/reader_controller.dart';
+import '../application/reader_position_policy.dart';
 import '../domain/reader_mode.dart';
 import '../domain/reader_progress.dart';
 import '../fast_mode/application/fast_mode_providers.dart';
@@ -36,7 +37,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   ReaderMode? _pendingMode;
   Timer? _switchTimer;
   Orientation? _lastOrientation;
-  bool _fastWatched = false;
 
   @override
   void initState() {
@@ -60,12 +60,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   void dispose() {
     _switchTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
-    // Final save (engine + reader are still alive during dispose).
+    // Final save (engine + reader are still alive during dispose). Exactly one
+    // save — the active mode's; the inactive surface was synced at the last
+    // handoff and its position would be stale here.
     try {
-      ref.read(readerControllerProvider(widget.bookId).notifier).saveNow();
-      if (_fastWatched) {
-        ref.read(fastModeEngineProvider(widget.bookId)).savePosition();
-      }
+      saveActiveModePosition(
+        mode: _effectiveMode,
+        saveNormal: () => ref
+            .read(readerControllerProvider(widget.bookId).notifier)
+            .saveNow(),
+        saveFast: () =>
+            ref.read(fastModeEngineProvider(widget.bookId)).savePosition(),
+      );
     } catch (_) {
       // Ignore — never throw from dispose.
     }
@@ -76,11 +82,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
-      ref.read(readerControllerProvider(widget.bookId).notifier).saveNow();
-      // Pause (not just save) so fast mode resumes paused, not playing.
-      if (_fastWatched) {
-        ref.read(fastModeEngineProvider(widget.bookId)).pause();
-      }
+      saveActiveModePosition(
+        mode: _effectiveMode,
+        saveNormal: () => ref
+            .read(readerControllerProvider(widget.bookId).notifier)
+            .saveNow(),
+        // Pause (not just save) so fast mode resumes paused, not playing.
+        saveFast: () => ref.read(fastModeEngineProvider(widget.bookId)).pause(),
+      );
     }
   }
 
@@ -88,8 +97,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
       ref.read(readerSettingsProvider).valueOrNull?.modeLockEnabled ?? false;
 
   /// Debounced orientation → mode switch (stability threshold avoids flips).
-  void _reactToOrientation(Orientation orientation) {
-    if (_modeLocked) {
+  /// [lockOverride] supplies a just-written lock value that the settings
+  /// stream may not reflect yet.
+  void _reactToOrientation(Orientation orientation, {bool? lockOverride}) {
+    if (lockOverride ?? _modeLocked) {
       _switchTimer?.cancel();
       _pendingMode = null;
       return;
@@ -123,8 +134,19 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     final reader = ref.read(readerControllerProvider(widget.bookId).notifier);
     final engine = ref.read(fastModeEngineProvider(widget.bookId));
     if (to == ReaderMode.fast) {
-      final offset = reader.currentStartOffset;
-      if (offset != null) engine.seekToOffset(offset);
+      // Seek only when the engine's token is outside the current page; inside
+      // it, the engine's finer-grained position wins (no rewind to page start).
+      final state = ref.read(readerControllerProvider(widget.bookId));
+      if (state is ReaderReady) {
+        final page = state.currentPage;
+        if (shouldSeekFastEngine(
+          engineOffset: engine.currentStartOffset,
+          pageStart: page.startOffset,
+          pageEnd: page.endOffset,
+        )) {
+          engine.seekToOffset(page.startOffset);
+        }
+      }
       engine.pause(); // fast mode starts paused
     } else {
       engine.pause();
@@ -134,12 +156,19 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   }
 
   void _toggleModeLock(bool currentlyLocked) {
-    ref.read(readerSettingsRepositoryProvider).setModeLock(!currentlyLocked);
-    if (currentlyLocked) {
-      // Was locked, now unlocked: re-evaluate orientation next frame.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _reactToOrientation(MediaQuery.orientationOf(context));
-      });
+    final locked = !currentlyLocked;
+    ref.read(readerSettingsRepositoryProvider).setModeLock(locked);
+    // React with the fresh value now — the settings stream only re-emits after
+    // the async write lands, so reading it here would race (and lose) the
+    // toggle.
+    if (locked) {
+      _switchTimer?.cancel();
+      _pendingMode = null;
+    } else {
+      _reactToOrientation(
+        MediaQuery.orientationOf(context),
+        lockOverride: false,
+      );
     }
   }
 
@@ -198,10 +227,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
       _pendingMode = null;
     }
 
-    // Keep the fast engine alive while a readable book is open (instant switch).
+    // Keep the fast engine alive while a readable book is open (instant
+    // switch). Watching alone never persists the engine's position: exit
+    // saves go through the active mode only (see dispose above).
     if (state is ReaderReady) {
       ref.watch(fastModeEngineProvider(widget.bookId));
-      _fastWatched = true;
     }
 
     return switch (state) {
