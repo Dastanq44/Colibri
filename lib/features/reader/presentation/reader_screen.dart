@@ -19,6 +19,7 @@ import '../domain/reader_mode.dart';
 import '../domain/reader_progress.dart';
 import '../fast_mode/application/fast_mode_providers.dart';
 import '../fast_mode/presentation/fast_reader_view.dart';
+import '../pdf/presentation/pdf_reader_view.dart';
 import '../settings/application/reader_settings_providers.dart';
 import '../settings/domain/reader_settings.dart';
 import '../settings/presentation/reader_settings_sheet.dart';
@@ -138,8 +139,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   }
 
   void _commitModeSwitch(ReaderMode to) {
+    final readerState = ref.read(readerControllerProvider(widget.bookId));
+    // PDFs never mode-switch (no fast mode in MVP).
+    if (readerState is ReaderPdfReady) {
+      _pendingMode = null;
+      return;
+    }
     _handoffPosition(to);
-    if (to == ReaderMode.fast) _haptic(HapticFeedback.lightImpact);
+    // Haptic only for a real fast-mode entry, not a switch armed while the
+    // book was still loading.
+    if (to == ReaderMode.fast && readerState is ReaderReady) {
+      _haptic(HapticFeedback.lightImpact);
+    }
     setState(() {
       _effectiveMode = to;
       _pendingMode = null;
@@ -396,6 +407,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
           title: l10n.readerTitle,
           child: _Message(icon: Icons.error_outline, text: l10n.readerOpenError),
         ),
+      ReaderPdfReady(:final source) => PdfReaderView(source: source),
       ReaderReady() => _effectiveMode == ReaderMode.fast
           ? FastReaderView(
               bookId: widget.bookId,

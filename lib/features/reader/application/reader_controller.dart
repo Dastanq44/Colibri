@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/errors/failures.dart';
 import '../../../core/result/result.dart';
+import '../domain/pdf_book_source.dart';
 import '../domain/reader_document.dart';
 import '../domain/reader_locator.dart';
 import '../domain/reader_locator_types.dart';
@@ -32,6 +33,14 @@ class ReaderUnsupported extends ReaderState {
 
 class ReaderFailed extends ReaderState {
   const ReaderFailed();
+}
+
+/// A PDF book, rendered by the native page viewer (TASK-0704). PDFs never
+/// enter fast mode in MVP, so orientation changes are ignored in this state.
+class ReaderPdfReady extends ReaderState {
+  const ReaderPdfReady(this.source);
+
+  final PdfBookSource source;
 }
 
 class ReaderReady extends ReaderState {
@@ -79,6 +88,17 @@ class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
     final repo = ref.read(readerRepositoryProvider);
     switch (await repo.openBook(arg)) {
       case Err(failure: final f):
+        // PDFs are not text documents: openBook signals unsupported and the
+        // page viewer takes over.
+        if (f is UnsupportedFormatFailure) {
+          switch (await repo.openPdfBook(arg)) {
+            case Ok(value: final source):
+              state = ReaderPdfReady(source);
+            case Err(failure: final pdfFailure):
+              state = _mapFailure(pdfFailure);
+          }
+          return;
+        }
         state = _mapFailure(f);
       case Ok(value: final doc):
         final pages =
@@ -175,6 +195,27 @@ class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
 
   /// Jumps to a table-of-contents entry's chapter and saves progress.
   void jumpToChapter(TocEntry entry) => jumpToOffset(entry.startOffset);
+
+  /// Persists PDF progress by 1-based page number (TASK-0704). Percent
+  /// mirrors the text reader's convention: the last page reads 100%.
+  Future<void> savePdfPage({
+    required int pageNumber,
+    required int pageCount,
+  }) async {
+    if (state is! ReaderPdfReady || pageNumber < 1 || pageCount < 1) return;
+    final percent = pageCount <= 1
+        ? 100.0
+        : ((pageNumber - 1) / (pageCount - 1)) * 100;
+    await ref.read(readerRepositoryProvider).saveLocator(
+          arg,
+          ReaderLocator(
+            locatorType: ReaderLocatorTypes.pdfPage,
+            locatorValue: '$pageNumber',
+            pageNumber: pageNumber,
+            percent: percent.clamp(0.0, 100.0),
+          ),
+        );
+  }
 
   Future<void> _persist() async {
     final s = state;

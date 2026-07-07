@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:colibri/core/errors/failures.dart';
 import 'package:colibri/core/result/result.dart';
 import 'package:colibri/data/repositories/reader_repository.dart';
 import 'package:colibri/features/reader/application/reader_providers.dart';
+import 'package:colibri/features/reader/domain/pdf_book_source.dart';
 import 'package:colibri/features/reader/domain/reader_chapter.dart';
 import 'package:colibri/features/reader/domain/reader_document.dart';
 import 'package:colibri/features/reader/domain/reader_locator.dart';
@@ -23,6 +25,10 @@ class _PendingReaderRepo implements ReaderRepository {
 
   @override
   Future<Result<ReaderDocument>> openBook(String bookId) => opened.future;
+
+  @override
+  Future<Result<PdfBookSource>> openPdfBook(String bookId) async =>
+      const Err(UnsupportedFormatFailure('Not a PDF book.'));
 
   @override
   Future<Result<ReaderLocator?>> getSavedLocator(String bookId) async =>

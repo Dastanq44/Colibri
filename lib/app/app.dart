@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/constants/app_constants.dart';
+import '../features/onboarding/application/onboarding_providers.dart';
 import 'localization/generated/app_localizations.dart';
 import 'localization/locale_controller.dart';
 import 'router/app_router.dart';
@@ -15,6 +16,18 @@ class ColibriApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Hold a splash until the onboarding flag resolves (one fast local read):
+    // the router's redirect needs a settled value on its very first pass.
+    if (ref.watch(onboardingCompletedProvider).isLoading) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light(),
+        darkTheme: AppTheme.dark(),
+        themeMode: ref.watch(themeModeProvider),
+        home: const Scaffold(body: SizedBox.expand()),
+      );
+    }
+
     final router = ref.watch(goRouterProvider);
     final themeMode = ref.watch(themeModeProvider);
     final locale = ref.watch(localeProvider);

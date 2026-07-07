@@ -7,9 +7,11 @@ import '../../core/errors/failures.dart';
 import '../../core/platform/device_id_service.dart';
 import '../../core/result/result.dart';
 import '../../features/reader/data/epub_extractor.dart';
+import '../../features/reader/domain/pdf_book_source.dart';
 import '../../features/reader/domain/reader_chapter.dart';
 import '../../features/reader/domain/reader_document.dart';
 import '../../features/reader/domain/reader_locator.dart';
+import '../../features/reader/domain/reader_locator_types.dart';
 import '../../features/reader/domain/reader_mode.dart';
 import '../../features/sync/data/local_sync_queue_repository.dart';
 import '../../shared/models/book_format.dart';
@@ -55,10 +57,42 @@ class LocalReaderRepository implements ReaderRepository {
       case BookFormat.epub:
         return _openEpub(book);
       case BookFormat.pdf:
+        // PDFs are page-rendered, not extracted to a text document — the
+        // controller falls back to [openPdfBook] on this failure.
         return const Err(
-          UnsupportedFormatFailure('PDF reading is coming later.'),
+          UnsupportedFormatFailure('PDFs open in the page viewer.'),
         );
     }
+  }
+
+  @override
+  Future<Result<PdfBookSource>> openPdfBook(String bookId) async {
+    final book = await _db.booksDao.getById(bookId);
+    if (book == null) return const Err(NotFoundFailure('Book not found.'));
+    if (BookFormat.fromWire(book.format) != BookFormat.pdf) {
+      return const Err(UnsupportedFormatFailure('Not a PDF book.'));
+    }
+    if (!await File(book.fileLocalPath).exists()) {
+      return const Err(FileMissingFailure('The book file is missing.'));
+    }
+
+    await _markOpened(book.id);
+
+    var initialPage = 1;
+    final progress = await _db.progressDao.getByBookId(bookId);
+    if (progress != null && progress.locatorType == ReaderLocatorTypes.pdfPage) {
+      initialPage =
+          progress.pageNumber ?? int.tryParse(progress.locatorValue) ?? 1;
+      if (initialPage < 1) initialPage = 1;
+    }
+    return Ok(
+      PdfBookSource(
+        bookId: book.id,
+        title: book.title,
+        filePath: book.fileLocalPath,
+        initialPageNumber: initialPage,
+      ),
+    );
   }
 
   Future<Result<ReaderDocument>> _openEpub(LocalBook book) async {

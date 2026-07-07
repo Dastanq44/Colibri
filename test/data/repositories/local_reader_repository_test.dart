@@ -63,10 +63,61 @@ void main() {
     expect(doc.fullText, 'Line one\nLine two');
   });
 
-  test('returns unsupported for PDF', () async {
+  test('returns unsupported for PDF (openBook; page viewer path instead)',
+      () async {
     await seedBook('p1', format: 'pdf', content: '%PDF-1.7');
     final result = await repo.openBook('p1');
     expect((result as Err).failure, isA<UnsupportedFormatFailure>());
+  });
+
+  group('openPdfBook', () {
+    test('returns the file path and defaults to page 1', () async {
+      await seedBook('p1', format: 'pdf', content: '%PDF-1.7');
+      final source = ((await repo.openPdfBook('p1')) as Ok).value;
+      expect(source.title, 'Book p1');
+      expect(source.filePath, endsWith('p1.pdf'));
+      expect(source.initialPageNumber, 1);
+    });
+
+    test('resumes at the saved pdf_page locator', () async {
+      await seedBook('p1', format: 'pdf', content: '%PDF-1.7');
+      await repo.saveLocator(
+        'p1',
+        const ReaderLocator(
+          locatorType: 'pdf_page',
+          locatorValue: '12',
+          pageNumber: 12,
+          percent: 40,
+        ),
+      );
+      final source = ((await repo.openPdfBook('p1')) as Ok).value;
+      expect(source.initialPageNumber, 12);
+    });
+
+    test('ignores a non-pdf locator left by another format', () async {
+      await seedBook('p1', format: 'pdf', content: '%PDF-1.7');
+      await repo.saveLocator(
+        'p1',
+        const ReaderLocator(
+          locatorType: 'text_offset',
+          locatorValue: '900',
+          pageNumber: 3,
+          percent: 10,
+        ),
+      );
+      final source = ((await repo.openPdfBook('p1')) as Ok).value;
+      expect(source.initialPageNumber, 1);
+    });
+
+    test('fails typed for a missing file and a non-pdf book', () async {
+      await seedBook('gone', format: 'pdf'); // no content -> no file
+      expect(((await repo.openPdfBook('gone')) as Err).failure,
+          isA<FileMissingFailure>());
+
+      await seedBook('t1', format: 'txt', content: 'hello');
+      expect(((await repo.openPdfBook('t1')) as Err).failure,
+          isA<UnsupportedFormatFailure>());
+    });
   });
 
   test('returns malformed failure for an invalid EPUB', () async {

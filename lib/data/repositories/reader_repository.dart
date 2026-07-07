@@ -1,4 +1,5 @@
 import '../../core/result/result.dart';
+import '../../features/reader/domain/pdf_book_source.dart';
 import '../../features/reader/domain/reader_document.dart';
 import '../../features/reader/domain/reader_locator.dart';
 import '../../features/reader/domain/reader_mode.dart';
@@ -10,6 +11,11 @@ abstract interface class ReaderRepository {
   /// failure for unsupported formats or missing files. Also stamps the book's
   /// `lastOpenedAt`.
   Future<Result<ReaderDocument>> openBook(String bookId);
+
+  /// Opens a PDF for the native page viewer (TASK-0704): validates the file
+  /// and returns its path plus the saved 1-based page to resume at. Also
+  /// stamps the book's `lastOpenedAt`.
+  Future<Result<PdfBookSource>> openPdfBook(String bookId);
 
   /// The last saved position for a book, or `null` if none.
   Future<Result<ReaderLocator?>> getSavedLocator(String bookId);

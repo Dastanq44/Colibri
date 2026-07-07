@@ -8,6 +8,7 @@ import '../../features/catalog/presentation/catalog_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/import/presentation/import_screen.dart';
 import '../../features/library/presentation/library_screen.dart';
+import '../../features/onboarding/application/onboarding_providers.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/reader/presentation/reader_screen.dart';
@@ -18,14 +19,26 @@ import 'unknown_route_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
-/// Provides the app's [GoRouter]. Auth/onboarding redirect logic is added in
-/// later phases; for the foundation every placeholder screen is navigable and
-/// the four tabs are wired up.
+/// Provides the app's [GoRouter]. First launch is gated to onboarding; the
+/// app root shows a splash until the onboarding flag resolves, so the
+/// redirect below always sees a settled value.
 final goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: AppRoutes.home,
     debugLogDiagnostics: true,
+    redirect: (context, state) {
+      // First-launch gate only: force onboarding until completed. Completed
+      // users may still open /onboarding explicitly (e.g. from Home) — no
+      // bounce back, or that entry point would be rewritten mid-push.
+      // On a load error, err toward not blocking the app (skip onboarding).
+      final completed =
+          ref.read(onboardingCompletedProvider).valueOrNull ?? true;
+      if (!completed && state.matchedLocation != AppRoutes.onboarding) {
+        return AppRoutes.onboarding;
+      }
+      return null;
+    },
     routes: <RouteBase>[
       // --- Top-level / pushed routes ---
       GoRoute(

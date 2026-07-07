@@ -1,7 +1,9 @@
+import 'package:colibri/core/errors/failures.dart';
 import 'package:colibri/core/result/result.dart';
 import 'package:colibri/data/repositories/reader_repository.dart';
 import 'package:colibri/features/reader/application/reader_controller.dart';
 import 'package:colibri/features/reader/application/reader_providers.dart';
+import 'package:colibri/features/reader/domain/pdf_book_source.dart';
 import 'package:colibri/features/reader/domain/reader_chapter.dart';
 import 'package:colibri/features/reader/domain/reader_document.dart';
 import 'package:colibri/features/reader/domain/reader_locator.dart';
@@ -13,14 +15,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _FakeReaderRepo implements ReaderRepository {
-  _FakeReaderRepo(this._doc, this._saved);
+  _FakeReaderRepo(this._doc, this._saved, {this.pdfSource});
 
   final ReaderDocument _doc;
   final ReaderLocator? _saved;
+
+  /// When set, [openBook] signals unsupported (as it does for real PDFs) and
+  /// [openPdfBook] serves this source.
+  final PdfBookSource? pdfSource;
   ReaderLocator? lastSaved;
 
   @override
-  Future<Result<ReaderDocument>> openBook(String bookId) async => Ok(_doc);
+  Future<Result<ReaderDocument>> openBook(String bookId) async =>
+      pdfSource == null
+          ? Ok(_doc)
+          : const Err(
+              UnsupportedFormatFailure('PDFs open in the page viewer.'));
+
+  @override
+  Future<Result<PdfBookSource>> openPdfBook(String bookId) async {
+    final source = pdfSource;
+    return source == null
+        ? const Err(UnsupportedFormatFailure('Not a PDF book.'))
+        : Ok(source);
+  }
 
   @override
   Future<Result<ReaderLocator?>> getSavedLocator(String bookId) async =>
@@ -196,6 +214,82 @@ void main() {
 
       final after = c.read(readerControllerProvider('b')) as ReaderReady;
       expect(after.pageIndex, greaterThan(0));
+    });
+  });
+
+  group('ReaderController PDF path', () {
+    _FakeReaderRepo pdfRepo() => _FakeReaderRepo(
+          const ReaderDocument(
+            bookId: 'p',
+            title: 'unused',
+            format: 'pdf',
+            chapters: <ReaderChapter>[],
+          ),
+          null,
+          pdfSource: const PdfBookSource(
+            bookId: 'p',
+            title: 'My PDF',
+            filePath: '/tmp/p.pdf',
+            initialPageNumber: 7,
+          ),
+        );
+
+    ProviderContainer pdfContainer(_FakeReaderRepo fake) {
+      final c = ProviderContainer(
+        overrides: <Override>[
+          readerRepositoryProvider.overrideWithValue(fake),
+        ],
+      );
+      addTearDown(c.dispose);
+      return c;
+    }
+
+    Future<ReaderPdfReady> pumpPdfReady(ProviderContainer c) async {
+      c.listen(readerControllerProvider('p'), (_, __) {});
+      for (var i = 0; i < 100; i++) {
+        final s = c.read(readerControllerProvider('p'));
+        if (s is ReaderPdfReady) return s;
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      throw StateError('pdf reader never became ready');
+    }
+
+    test('a PDF book loads into ReaderPdfReady with the saved page', () async {
+      final c = pdfContainer(pdfRepo());
+      final ready = await pumpPdfReady(c);
+      expect(ready.source.title, 'My PDF');
+      expect(ready.source.initialPageNumber, 7);
+    });
+
+    test('savePdfPage writes a pdf_page locator with last page = 100%',
+        () async {
+      final fake = pdfRepo();
+      final c = pdfContainer(fake);
+      await pumpPdfReady(c);
+      final ctrl = c.read(readerControllerProvider('p').notifier);
+
+      await ctrl.savePdfPage(pageNumber: 3, pageCount: 5);
+      expect(fake.lastSaved?.locatorType, ReaderLocatorTypes.pdfPage);
+      expect(fake.lastSaved?.locatorValue, '3');
+      expect(fake.lastSaved?.pageNumber, 3);
+      expect(fake.lastSaved?.percent, 50);
+
+      await ctrl.savePdfPage(pageNumber: 5, pageCount: 5);
+      expect(fake.lastSaved?.percent, 100);
+
+      await ctrl.savePdfPage(pageNumber: 1, pageCount: 1);
+      expect(fake.lastSaved?.percent, 100); // single-page PDF
+    });
+
+    test('savePdfPage ignores invalid input', () async {
+      final fake = pdfRepo();
+      final c = pdfContainer(fake);
+      await pumpPdfReady(c);
+      final ctrl = c.read(readerControllerProvider('p').notifier);
+
+      await ctrl.savePdfPage(pageNumber: 0, pageCount: 5);
+      await ctrl.savePdfPage(pageNumber: 2, pageCount: 0);
+      expect(fake.lastSaved, isNull);
     });
   });
 

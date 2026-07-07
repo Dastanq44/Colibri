@@ -49,6 +49,7 @@ dependencies:
   # and sentry-cocoa >= 8.52 removed internal APIs the 8.x plugin used, breaking
   # the iOS build. 9.x pins an exact, compatible sentry-cocoa version.
   sentry_flutter: ^9.23.0
+  pdfrx: ^2.4.4
 
   # Analytics SDK (Firebase Analytics or Amplitude) is added in Phase 15.
   # The AnalyticsRepository interface + a no-op default already exist so call
