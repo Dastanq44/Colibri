@@ -1,0 +1,23 @@
+# Annotations: create a bookmark and a note, then see them in the list.
+# Precondition: one imported book already opened once (see README).
+appId: com.colibri.colibri
+---
+- launchApp
+- tapOn:
+    below: "Continue reading"
+    index: 0
+# Reader menu (bottom-right).
+- tapOn: "Reader menu"
+- tapOn: "Add bookmark"
+- inputText: "E2E bookmark"
+- tapOn: "Add"
+- assertVisible: "Bookmark added"
+- tapOn: "Reader menu"
+- tapOn: "Add note"
+- inputText: "E2E note"
+- tapOn: "Add"
+- assertVisible: "Note added"
+- tapOn: "Reader menu"
+- tapOn: "Notes & bookmarks"
+- assertVisible: "E2E bookmark"
+- assertVisible: "E2E note"

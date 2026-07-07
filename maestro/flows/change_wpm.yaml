@@ -1,0 +1,19 @@
+# Fast-mode speed control: right tap +25 WPM, left tap -25 WPM.
+# Precondition: one imported book already opened once (see README).
+appId: com.colibri.colibri
+---
+- launchApp
+- tapOn:
+    below: "Continue reading"
+    index: 0
+- setOrientation: LANDSCAPE_LEFT
+- assertVisible: "275 WPM"
+# Right tap zone = faster.
+- tapOn:
+    point: "85%,40%"
+- assertVisible: "300 WPM"
+# Left tap zone = slower.
+- tapOn:
+    point: "15%,40%"
+- assertVisible: "275 WPM"
+- setOrientation: PORTRAIT

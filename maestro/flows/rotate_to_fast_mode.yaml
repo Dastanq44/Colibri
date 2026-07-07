@@ -1,0 +1,23 @@
+# Core loop: open a book, rotate to fast mode, rotate back to the reader.
+# Precondition: one imported book already opened once (see README).
+appId: com.colibri.colibri
+---
+- launchApp
+- assertVisible: "Continue reading"
+# Open the most recent book (first progress bar card under the section).
+- tapOn:
+    below: "Continue reading"
+    index: 0
+# Portrait reader: progress bar percent is visible in the bottom bar.
+- assertVisible:
+    text: ".*%"
+- setOrientation: LANDSCAPE_LEFT
+# Fast mode: WPM indicator appears (starts paused).
+- assertVisible:
+    text: ".*WPM"
+- setOrientation: PORTRAIT
+# Back in the normal reader.
+- assertVisible:
+    text: ".*%"
+- assertNotVisible:
+    text: ".*WPM"

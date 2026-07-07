@@ -152,21 +152,34 @@ class _SignedInBody extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 24),
-        // Placeholder stats (wired to real data in later phases)
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
-          childAspectRatio: 2.4,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          children: <Widget>[
-            _StatCard(label: l10n.profileStatsBooksRead, value: '—'),
-            _StatCard(label: l10n.profileStatsCurrentBooks, value: '—'),
-            _StatCard(label: l10n.profileStatsAvgWpm, value: '—'),
-            _StatCard(label: l10n.profileStatsBadges, value: '—'),
-          ],
-        ),
+        // Local stats; avg WPM and badges stay placeholders until session
+        // tracking / badges land.
+        Builder(builder: (context) {
+          final stats = ref.watch(readingStatsProvider).valueOrNull;
+          return GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            childAspectRatio: 2.4,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            children: <Widget>[
+              _StatCard(
+                label: l10n.profileStatsBooksRead,
+                value: stats?.booksRead.toString() ?? '—',
+              ),
+              _StatCard(
+                label: l10n.profileStatsCurrentBooks,
+                value: stats?.currentBooks.toString() ?? '—',
+              ),
+              _StatCard(
+                label: l10n.profileStatsAvgWpm,
+                value: stats?.avgWpm?.toString() ?? '—',
+              ),
+              _StatCard(label: l10n.profileStatsBadges, value: '—'),
+            ],
+          );
+        }),
         const SizedBox(height: 24),
         _SyncSection(l10n: l10n),
         const SizedBox(height: 8),

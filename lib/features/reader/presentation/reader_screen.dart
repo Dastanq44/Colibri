@@ -23,6 +23,7 @@ import '../pdf/presentation/pdf_reader_view.dart';
 import '../settings/application/reader_settings_providers.dart';
 import '../settings/domain/reader_settings.dart';
 import '../settings/presentation/reader_settings_sheet.dart';
+import 'search_sheet.dart';
 import 'toc_sheet.dart';
 
 /// The reader. Portrait = normal paged reader; landscape = fast mode (when the
@@ -215,6 +216,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
               onTap: () => Navigator.pop(ctx, 'toc'),
             ),
             ListTile(
+              leading: const Icon(Icons.search),
+              title: Text(l10n.readerSearchInBook),
+              onTap: () => Navigator.pop(ctx, 'search'),
+            ),
+            ListTile(
               leading: const Icon(Icons.bookmark_add_outlined),
               title: Text(l10n.readerAddBookmark),
               onTap: () => Navigator.pop(ctx, 'add_bookmark'),
@@ -250,6 +256,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
                 .jumpToChapter(entry),
           ),
         );
+      case 'search':
+        await _openSearch(state);
       case 'add_bookmark':
         await _addBookmark(state);
       case 'add_note':
@@ -305,6 +313,35 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     _showResultSnack(result is Ok ? l10n.noteAdded : null);
   }
 
+  /// Jumps both reading surfaces to [offset]. The device may have rotated
+  /// while a sheet was open (mode switched underneath it); seeding the fast
+  /// engine too keeps the jump from being clobbered at the next handoff.
+  void _jumpTo(int offset) {
+    ref
+        .read(readerControllerProvider(widget.bookId).notifier)
+        .jumpToOffset(offset);
+    if (_effectiveMode == ReaderMode.fast) {
+      ref.read(fastModeEngineProvider(widget.bookId)).seekToOffset(offset);
+    }
+  }
+
+  Future<void> _openSearch(ReaderReady state) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      // Scroll-controlled so the sheet rises above the keyboard.
+      isScrollControlled: true,
+      builder: (sheetCtx) => SearchSheet(
+        fullText: state.document.fullText,
+        onJump: (offset) {
+          if (ModalRoute.of(sheetCtx)?.isCurrent ?? false) {
+            Navigator.pop(sheetCtx);
+          }
+          _jumpTo(offset);
+        },
+      ),
+    );
+  }
+
   Future<void> _openAnnotations() async {
     // Default (capped) sheet height: long lists scroll inside the sheet
     // instead of covering the whole reader.
@@ -317,9 +354,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
           if (ModalRoute.of(sheetCtx)?.isCurrent ?? false) {
             Navigator.pop(sheetCtx);
           }
-          ref
-              .read(readerControllerProvider(widget.bookId).notifier)
-              .jumpToOffset(offset);
+          _jumpTo(offset);
         },
       ),
     );

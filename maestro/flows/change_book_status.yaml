@@ -1,0 +1,24 @@
+# My Books: change a book's status via the card menu and find it on its tab.
+# Precondition: one imported book (see README).
+appId: com.colibri.colibri
+---
+- launchApp
+- tapOn: "My Books"
+# The card's trailing popup menu carries this tooltip.
+- tapOn: "Change status"
+# Status labels exist twice while the menu is open (tab bar behind + menu
+# item): index 1 targets the menu item.
+- tapOn:
+    text: "Finished"
+    index: 1
+# Switch to the Finished tab: the book is listed there now.
+- tapOn:
+    text: "Finished"
+    index: 0
+- assertVisible:
+    text: ".*EPUB|.*TXT|.*PDF"
+# Restore for repeatable runs.
+- tapOn: "Change status"
+- tapOn:
+    text: "Reading"
+    index: 1

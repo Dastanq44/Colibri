@@ -1,0 +1,17 @@
+# Fresh install: onboarding shows once, finishing lands on Home (empty state).
+appId: com.colibri.colibri
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Two ways to read"
+- tapOn: "Next"
+- assertVisible: "Fast mode"
+- tapOn: "Next"
+- assertVisible: "Control rotation"
+- tapOn: "Start reading"
+- assertVisible: "Start your library"
+# Relaunch: onboarding must not appear again.
+- stopApp
+- launchApp
+- assertVisible: "Home"
+- assertNotVisible: "Two ways to read"
