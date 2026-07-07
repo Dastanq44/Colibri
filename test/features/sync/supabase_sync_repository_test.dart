@@ -223,6 +223,79 @@ void main() {
       expect(remaining.single.id, 'recent-done');
     });
 
+    test('note and bookmark upserts hit their tables with uuid-mapped ids',
+        () async {
+      final requests = <({String path, Map<String, dynamic> body})>[];
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((req) async {
+        final body = await utf8.decoder.bind(req).join();
+        final decoded = jsonDecode(body);
+        requests.add((
+          path: req.uri.path,
+          // PostgREST upserts may send a single object or a list.
+          body: (decoded is List ? decoded.first : decoded)
+              as Map<String, dynamic>,
+        ));
+        req.response
+          ..statusCode = 201
+          ..headers.contentType = ContentType.json
+          ..write('[]');
+        await req.response.close();
+      });
+
+      const noteId = '0123456789abcdef0123456789abcdef';
+      const bookId = 'fedcba9876543210fedcba9876543210';
+      await db.syncQueueDao.enqueueOrReplace(
+        entityType: 'note',
+        entityId: noteId,
+        operation: 'update',
+        payloadJson: jsonEncode(<String, dynamic>{
+          'book_id': bookId,
+          'locator_type': 'text_offset',
+          'locator_value': '1500',
+          'note_text': 'hi',
+          'deleted_at': null,
+        }),
+        userId: 'user-a',
+      );
+      await db.syncQueueDao.enqueueOrReplace(
+        entityType: 'bookmark',
+        entityId: noteId,
+        operation: 'update',
+        payloadJson: jsonEncode(<String, dynamic>{
+          'book_id': bookId,
+          'locator_type': 'text_offset',
+          'locator_value': '1500',
+          'label': 'here',
+          'deleted_at': null,
+        }),
+        userId: 'user-a',
+      );
+
+      final client = await _signedInClient('http://127.0.0.1:${server.port}');
+      addTearDown(() => client.dispose());
+      final repo = SupabaseSyncRepository(client: client, db: db);
+      addTearDown(repo.dispose);
+
+      final result = await repo.syncNow();
+
+      expect((result as Ok<SyncRunResult>).value.succeeded, 2);
+      final paths = requests.map((r) => r.path).toSet();
+      expect(paths, contains('/rest/v1/notes'));
+      expect(paths, contains('/rest/v1/bookmarks'));
+      for (final request in requests) {
+        // The annotation's OWN id is uuid-mapped (not treated as a book id),
+        // and the book id inside the payload is mapped independently.
+        expect(request.body['id'], '01234567-89ab-cdef-0123-456789abcdef');
+        expect(
+            request.body['book_id'], 'fedcba98-7654-3210-fedc-ba9876543210');
+        expect(request.body['user_id'], 'user-a');
+      }
+      final rows = await db.syncQueueDao.getAll();
+      expect(rows.map((r) => r.status).toSet(), {SyncQueueStatus.done});
+    });
+
     test('unexpected internal errors become an Err instead of a throw',
         () async {
       // A database that cannot be opened: every queue call throws.

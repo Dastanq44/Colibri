@@ -109,6 +109,24 @@ void main() {
         operation: 'create',
       ),
     );
+    // Annotation queue rows are keyed by the annotation id, not the book id —
+    // removal must clean these too or their snapshots upload after deletion.
+    await db.syncQueueDao.enqueue(
+      SyncQueueCompanion.insert(
+        id: 'q2',
+        entityType: 'note',
+        entityId: 'n1',
+        operation: 'update',
+      ),
+    );
+    await db.syncQueueDao.enqueue(
+      SyncQueueCompanion.insert(
+        id: 'q3',
+        entityType: 'bookmark',
+        entityId: 'm1',
+        operation: 'update',
+      ),
+    );
     final bookDir = Directory('${tmp.path}/books/b1')
       ..createSync(recursive: true);
     File('${bookDir.path}/b1.txt').writeAsStringSync('x');

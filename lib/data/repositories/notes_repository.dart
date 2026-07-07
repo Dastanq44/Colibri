@@ -1,13 +1,30 @@
 import '../../core/result/result.dart';
+import '../../features/notes/domain/annotations.dart';
+import '../../features/reader/domain/reader_locator.dart';
 
-/// Boundary for notes and bookmarks. Implemented in Phase 11 (offline-first
-/// with soft deletes and sync).
+/// Boundary for notes and bookmarks (Phase 11). Offline-first: writes land in
+/// the local database with soft deletes and are queued for cloud sync.
 abstract interface class NotesRepository {
-  Future<Result<void>> createNote(String bookId, String text);
+  Future<Result<Bookmark>> createBookmark(
+    String bookId, {
+    required ReaderLocator locator,
+    String? label,
+  });
 
-  Future<Result<void>> createBookmark(String bookId, {String? label});
+  Future<Result<Note>> createNote(
+    String bookId, {
+    required ReaderLocator locator,
+    required String noteText,
+    String? selectedText,
+  });
 
-  Future<Result<void>> listForBook(String bookId);
+  /// Live non-deleted bookmarks for a book, newest first.
+  Stream<List<Bookmark>> watchBookmarks(String bookId);
 
-  Future<Result<void>> softDelete(String id);
+  /// Live non-deleted notes for a book, newest first.
+  Stream<List<Note>> watchNotes(String bookId);
+
+  Future<Result<void>> deleteBookmark(String id);
+
+  Future<Result<void>> deleteNote(String id);
 }

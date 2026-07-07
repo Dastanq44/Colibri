@@ -96,14 +96,27 @@ class LocalLibraryRepository implements LibraryRepository {
         await (_db.delete(_db.localReadingSessions)
               ..where((s) => s.bookId.equals(bookId)))
             .go();
+        // Annotation queue rows are keyed by the annotation's own id, so
+        // collect them before the rows go away — otherwise their queued
+        // snapshots would still upload after the book is removed.
+        final noteIds = await (_db.select(_db.localNotes)
+              ..where((n) => n.bookId.equals(bookId)))
+            .map((n) => n.id)
+            .get();
+        final bookmarkIds = await (_db.select(_db.localBookmarks)
+              ..where((b) => b.bookId.equals(bookId)))
+            .map((b) => b.id)
+            .get();
         await (_db.delete(_db.localNotes)..where((n) => n.bookId.equals(bookId)))
             .go();
         await (_db.delete(_db.localBookmarks)
               ..where((b) => b.bookId.equals(bookId)))
             .go();
-        // Drop any queued sync ops that reference this book.
+        // Drop any queued sync ops that reference this book or its
+        // annotations.
+        final removedIds = <String>[bookId, ...noteIds, ...bookmarkIds];
         await (_db.delete(_db.syncQueue)
-              ..where((q) => q.entityId.equals(bookId)))
+              ..where((q) => q.entityId.isIn(removedIds)))
             .go();
         await _db.booksDao.deleteById(bookId);
       });

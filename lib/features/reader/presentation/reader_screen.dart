@@ -8,8 +8,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/theme/reader_theme.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/result/result.dart';
+import '../../notes/application/notes_providers.dart';
+import '../../notes/presentation/annotations_sheet.dart';
 import '../application/reader_controller.dart';
 import '../application/reader_position_policy.dart';
+import '../domain/reader_locator.dart';
+import '../domain/reader_locator_types.dart';
 import '../domain/reader_mode.dart';
 import '../domain/reader_progress.dart';
 import '../fast_mode/application/fast_mode_providers.dart';
@@ -199,6 +204,21 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
               onTap: () => Navigator.pop(ctx, 'toc'),
             ),
             ListTile(
+              leading: const Icon(Icons.bookmark_add_outlined),
+              title: Text(l10n.readerAddBookmark),
+              onTap: () => Navigator.pop(ctx, 'add_bookmark'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.note_add_outlined),
+              title: Text(l10n.readerAddNote),
+              onTap: () => Navigator.pop(ctx, 'add_note'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.bookmarks_outlined),
+              title: Text(l10n.readerAnnotations),
+              onTap: () => Navigator.pop(ctx, 'annotations'),
+            ),
+            ListTile(
               leading: const Icon(Icons.settings_outlined),
               title: Text(l10n.readerSettingsTitle),
               onTap: () => Navigator.pop(ctx, 'settings'),
@@ -208,23 +228,119 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
       ),
     );
     if (!mounted) return;
-    if (choice == 'toc') {
-      await showModalBottomSheet<void>(
-        context: context,
-        builder: (_) => TocSheet(
-          toc: state.toc,
-          onSelect: (entry) => ref
-              .read(readerControllerProvider(widget.bookId).notifier)
-              .jumpToChapter(entry),
-        ),
-      );
-    } else if (choice == 'settings') {
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        builder: (_) => const ReaderSettingsSheet(),
-      );
+    switch (choice) {
+      case 'toc':
+        await showModalBottomSheet<void>(
+          context: context,
+          builder: (_) => TocSheet(
+            toc: state.toc,
+            onSelect: (entry) => ref
+                .read(readerControllerProvider(widget.bookId).notifier)
+                .jumpToChapter(entry),
+          ),
+        );
+      case 'add_bookmark':
+        await _addBookmark(state);
+      case 'add_note':
+        await _addNote(state);
+      case 'annotations':
+        await _openAnnotations();
+      case 'settings':
+        await showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          builder: (_) => const ReaderSettingsSheet(),
+        );
     }
+  }
+
+  /// The current page's position, as stored on bookmarks/notes (TASK-1101).
+  ReaderLocator _currentLocator(ReaderReady state) => ReaderLocator(
+        locatorType: ReaderLocatorTypes.textOffset,
+        locatorValue: state.currentPage.startOffset.toString(),
+        pageNumber: state.pageIndex,
+        percent: state.progress.percent,
+      );
+
+  Future<void> _addBookmark(ReaderReady state) async {
+    final l10n = AppLocalizations.of(context);
+    final label = await _promptText(
+      title: l10n.readerAddBookmark,
+      hint: l10n.bookmarkLabelHint,
+    );
+    if (label == null || !mounted) return; // dialog dismissed
+    final result = await ref.read(notesRepositoryProvider).createBookmark(
+          widget.bookId,
+          locator: _currentLocator(state),
+          label: label,
+        );
+    _showResultSnack(result is Ok ? l10n.bookmarkAdded : null);
+  }
+
+  Future<void> _addNote(ReaderReady state) async {
+    final l10n = AppLocalizations.of(context);
+    final text = await _promptText(
+      title: l10n.readerAddNote,
+      hint: l10n.noteTextHint,
+      multiline: true,
+      requireText: true,
+    );
+    if (text == null || text.trim().isEmpty || !mounted) return;
+    final result = await ref.read(notesRepositoryProvider).createNote(
+          widget.bookId,
+          locator: _currentLocator(state),
+          noteText: text,
+        );
+    _showResultSnack(result is Ok ? l10n.noteAdded : null);
+  }
+
+  Future<void> _openAnnotations() async {
+    // Default (capped) sheet height: long lists scroll inside the sheet
+    // instead of covering the whole reader.
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetCtx) => AnnotationsSheet(
+        bookId: widget.bookId,
+        onJump: (offset) {
+          // Guard against a double-tap popping the reader route as well.
+          if (ModalRoute.of(sheetCtx)?.isCurrent ?? false) {
+            Navigator.pop(sheetCtx);
+          }
+          ref
+              .read(readerControllerProvider(widget.bookId).notifier)
+              .jumpToOffset(offset);
+        },
+      ),
+    );
+  }
+
+  /// Confirmation (or the localized failure message when [successText] is
+  /// null) after an annotation write.
+  void _showResultSnack(String? successText) {
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(successText ?? l10n.annotationSaveFailed)),
+    );
+  }
+
+  /// Single-field text prompt. Returns null when dismissed/canceled; an empty
+  /// string is a valid "no label" submit unless [requireText] disables it.
+  Future<String?> _promptText({
+    required String title,
+    required String hint,
+    bool multiline = false,
+    bool requireText = false,
+  }) {
+    return showDialog<String>(
+      context: context,
+      builder: (_) => _TextPromptDialog(
+        title: title,
+        hint: hint,
+        multiline: multiline,
+        requireText: requireText,
+      ),
+    );
   }
 
   @override
@@ -310,6 +426,72 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
         ReaderUnsupportedReason.emptyText => l10n.readerNoText,
         ReaderUnsupportedReason.generic => l10n.readerUnsupportedTitle,
       };
+}
+
+/// Owns its [TextEditingController] so it stays alive through the dialog
+/// route's exit animation (disposing right after `showDialog` returns is a
+/// use-after-dispose window). Submits on keyboard Done for single-line input;
+/// disables Add while a required field is blank.
+class _TextPromptDialog extends StatefulWidget {
+  const _TextPromptDialog({
+    required this.title,
+    required this.hint,
+    required this.multiline,
+    required this.requireText,
+  });
+
+  final String title;
+  final String hint;
+  final bool multiline;
+  final bool requireText;
+
+  @override
+  State<_TextPromptDialog> createState() => _TextPromptDialogState();
+}
+
+class _TextPromptDialogState extends State<_TextPromptDialog> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool get _submittable =>
+      !widget.requireText || _controller.text.trim().isNotEmpty;
+
+  void _submit() {
+    if (_submittable) Navigator.pop(context, _controller.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return AlertDialog(
+      title: Text(widget.title),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        maxLines: widget.multiline ? 4 : 1,
+        textInputAction:
+            widget.multiline ? TextInputAction.newline : TextInputAction.done,
+        onChanged: widget.requireText ? (_) => setState(() {}) : null,
+        onSubmitted: widget.multiline ? null : (_) => _submit(),
+        decoration: InputDecoration(hintText: widget.hint),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(l10n.dialogCancel),
+        ),
+        FilledButton(
+          onPressed: _submittable ? _submit : null,
+          child: Text(l10n.dialogAdd),
+        ),
+      ],
+    );
+  }
 }
 
 class _Scaffold extends StatelessWidget {

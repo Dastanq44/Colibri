@@ -28,10 +28,13 @@ bool isSupportedSyncItem(SyncEntityType? type, SyncOperation? op) {
       return op == SyncOperation.create || op == SyncOperation.update;
     case SyncEntityType.readingProgress:
       return op == SyncOperation.create || op == SyncOperation.update;
-    case SyncEntityType.readerSettings:
-    case SyncEntityType.fastSettings:
     case SyncEntityType.note:
     case SyncEntityType.bookmark:
+      // Update-only upserts: every snapshot (including soft-delete
+      // tombstones) travels as an update (TASK-1104).
+      return op == SyncOperation.update;
+    case SyncEntityType.readerSettings:
+    case SyncEntityType.fastSettings:
     case SyncEntityType.readingSession:
       return false; // not part of the MVP cloud schema/flow yet
   }
@@ -91,6 +94,49 @@ Map<String, dynamic> progressRow(
     'device_id': payload['device_id'],
     'revision': payload['revision'],
     'updated_at': payload['updated_at'],
+  };
+}
+
+/// Cloud `notes` row from a queued note snapshot. [noteUuid] is the local
+/// note id in uuid form; `book_id` is mapped the same way.
+Map<String, dynamic> noteRow(
+  String userId,
+  String noteUuid,
+  Map<String, dynamic> payload,
+) {
+  return <String, dynamic>{
+    'id': noteUuid,
+    'user_id': userId,
+    'book_id': localBookIdToUuid(payload['book_id'] as String),
+    'locator_type': payload['locator_type'],
+    'locator_value': payload['locator_value'],
+    'selected_text': payload['selected_text'],
+    'note_text': payload['note_text'],
+    'color': payload['color'],
+    'created_at': payload['created_at'],
+    'updated_at': payload['updated_at'],
+    'deleted_at': payload['deleted_at'],
+  };
+}
+
+/// Cloud `bookmarks` row from a queued bookmark snapshot (see [noteRow]).
+Map<String, dynamic> bookmarkRow(
+  String userId,
+  String bookmarkUuid,
+  Map<String, dynamic> payload,
+) {
+  return <String, dynamic>{
+    'id': bookmarkUuid,
+    'user_id': userId,
+    'book_id': localBookIdToUuid(payload['book_id'] as String),
+    'locator_type': payload['locator_type'],
+    'locator_value': payload['locator_value'],
+    'chapter_index': payload['chapter_index'],
+    'paragraph_index': payload['paragraph_index'],
+    'token_index': payload['token_index'],
+    'label': payload['label'],
+    'created_at': payload['created_at'],
+    'deleted_at': payload['deleted_at'],
   };
 }
 

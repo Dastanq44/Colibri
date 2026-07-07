@@ -122,27 +122,33 @@ class SupabaseSyncRepository implements SyncRepository {
     }
     final payload =
         (jsonDecode(item.payloadJson) as Map).cast<String, dynamic>();
-    final bookUuid = localBookIdToUuid(item.entityId);
+    // For book-scoped entities this is the book id; for notes/bookmarks it is
+    // the annotation's own id (their book_id travels in the payload).
+    final entityUuid = localBookIdToUuid(item.entityId);
 
     switch (type!) {
       case SyncEntityType.book:
-        await client.from('books').upsert(booksRow(bookUuid, payload));
+        await client.from('books').upsert(booksRow(entityUuid, payload));
       case SyncEntityType.bookshelf:
         await client.from('user_bookshelf').upsert(
-              bookshelfRow(userId, bookUuid, payload),
+              bookshelfRow(userId, entityUuid, payload),
               onConflict: 'user_id,book_id',
             );
       case SyncEntityType.readingProgress:
         await client.from('reading_progress').upsert(
-              progressRow(userId, bookUuid, payload),
+              progressRow(userId, entityUuid, payload),
               onConflict: 'user_id,book_id',
             );
       case SyncEntityType.bookFile:
-        await _uploadBookFile(client, userId, bookUuid, payload);
+        await _uploadBookFile(client, userId, entityUuid, payload);
+      case SyncEntityType.note:
+        await client.from('notes').upsert(noteRow(userId, entityUuid, payload));
+      case SyncEntityType.bookmark:
+        await client
+            .from('bookmarks')
+            .upsert(bookmarkRow(userId, entityUuid, payload));
       case SyncEntityType.readerSettings:
       case SyncEntityType.fastSettings:
-      case SyncEntityType.note:
-      case SyncEntityType.bookmark:
       case SyncEntityType.readingSession:
         throw UnsupportedError('Unsupported sync item: ${item.entityType}');
     }

@@ -95,6 +95,52 @@ class LocalSyncQueueRepository {
     );
   }
 
+  /// Enqueues a full snapshot of a note (including a `deleted_at` tombstone
+  /// for soft deletes) as an upsert. Update-only keeps coalescing simple:
+  /// the latest snapshot always wins.
+  Future<void> enqueueNote(String noteId) async {
+    final note = await _db.notesDao.getNoteById(noteId);
+    if (note == null) return;
+    await _enqueue(
+      SyncEntityType.note,
+      noteId,
+      SyncOperation.update,
+      <String, dynamic>{
+        'book_id': note.bookId,
+        'locator_type': note.locatorType,
+        'locator_value': note.locatorValue,
+        'selected_text': note.selectedText,
+        'note_text': note.noteText,
+        'color': note.color,
+        'created_at': note.createdAt,
+        'updated_at': note.updatedAt,
+        'deleted_at': note.deletedAt,
+      },
+    );
+  }
+
+  /// Enqueues a full snapshot of a bookmark (see [enqueueNote]).
+  Future<void> enqueueBookmark(String bookmarkId) async {
+    final bookmark = await _db.notesDao.getBookmarkById(bookmarkId);
+    if (bookmark == null) return;
+    await _enqueue(
+      SyncEntityType.bookmark,
+      bookmarkId,
+      SyncOperation.update,
+      <String, dynamic>{
+        'book_id': bookmark.bookId,
+        'locator_type': bookmark.locatorType,
+        'locator_value': bookmark.locatorValue,
+        'chapter_index': bookmark.chapterIndex,
+        'paragraph_index': bookmark.paragraphIndex,
+        'token_index': bookmark.tokenIndex,
+        'label': bookmark.label,
+        'created_at': bookmark.createdAt,
+        'deleted_at': bookmark.deletedAt,
+      },
+    );
+  }
+
   Future<int> pendingCount() =>
       _db.syncQueueDao.pendingCount(userId: _currentUserId());
 
