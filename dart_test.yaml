@@ -1,0 +1,4 @@
+tags:
+  # Tests that talk to the live dev Supabase project. They self-skip without
+  # a real .env.dev; exclude explicitly with: flutter test -x live
+  live:

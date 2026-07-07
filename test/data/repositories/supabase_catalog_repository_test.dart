@@ -1,0 +1,95 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:colibri/core/errors/failures.dart';
+import 'package:colibri/core/result/result.dart';
+import 'package:colibri/data/repositories/supabase_catalog_repository.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+void main() {
+  test('no backend returns BackendUnavailableFailure', () async {
+    final repo = SupabaseCatalogRepository(null);
+    expect(((await repo.searchBooks()) as Err).failure,
+        isA<BackendUnavailableFailure>());
+    expect(((await repo.getBookDetails('x')) as Err).failure,
+        isA<BackendUnavailableFailure>());
+  });
+
+  test('addToShelf requires a signed-in user', () async {
+    final client = SupabaseClient('http://127.0.0.1:1', 'anon');
+    addTearDown(() => client.dispose());
+    final repo = SupabaseCatalogRepository(client);
+    expect(((await repo.addToShelf('b')) as Err).failure,
+        isA<UnauthorizedFailure>());
+  });
+
+  test('searchBooks parses rows with joined authors and sends paging',
+      () async {
+    Uri? captured;
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((req) {
+      captured = req.uri;
+      req.response
+        ..statusCode = 200
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode(<Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 'b1',
+            'title': 'Война и мир',
+            'format': 'epub',
+            'language': 'ru',
+            'is_fast_mode_supported': true,
+            'book_authors': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'authors': <String, dynamic>{'name': 'Лев Толстой'}
+              },
+            ],
+          },
+          <String, dynamic>{
+            'id': 'b2',
+            'title': 'No Author Book',
+            'format': 'txt',
+            'book_authors': <dynamic>[],
+          },
+        ]));
+      req.response.close();
+    });
+
+    final client = SupabaseClient('http://127.0.0.1:${server.port}', 'anon');
+    addTearDown(() => client.dispose());
+    final repo = SupabaseCatalogRepository(client);
+
+    final books =
+        ((await repo.searchBooks(query: 'вой', page: 2, pageSize: 10)) as Ok)
+            .value;
+    expect(books, hasLength(2));
+    expect(books.first.title, 'Война и мир');
+    expect(books.first.authorDisplay, 'Лев Толстой');
+    expect(books.first.isFastModeSupported, isTrue);
+    expect(books.last.authorDisplay, isEmpty);
+
+    // ilike filter + ordered + paged (offset 20..29 for page 2 of 10).
+    final query = captured!.query;
+    expect(query, contains('title=ilike'));
+    expect(query, contains('order=title'));
+  });
+
+  test('getBookDetails returns null for a missing book', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((req) {
+      req.response
+        ..statusCode = 200
+        ..headers.contentType = ContentType.json
+        ..write('[]');
+      req.response.close();
+    });
+    final client = SupabaseClient('http://127.0.0.1:${server.port}', 'anon');
+    addTearDown(() => client.dispose());
+    final repo = SupabaseCatalogRepository(client);
+
+    expect(((await repo.getBookDetails('missing')) as Ok).value, isNull);
+  });
+}

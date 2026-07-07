@@ -1,13 +1,25 @@
 import '../../core/result/result.dart';
+import '../../features/catalog/domain/catalog_book.dart';
 
-/// Boundary for catalog discovery. Implemented in Phase 5 on top of Supabase
-/// Postgres (full-text search + filters).
+/// Boundary for catalog discovery (Phase 5), backed by Supabase Postgres.
 abstract interface class CatalogRepository {
-  Future<Result<void>> searchBooks({required String query, int page = 0});
+  /// Lists catalog books, filtered by [query] (title substring) when
+  /// non-empty. [page] is zero-based with [pageSize] rows per page.
+  Future<Result<List<CatalogBook>>> searchBooks({
+    String query = '',
+    int page = 0,
+    int pageSize = 30,
+  });
 
-  Future<Result<void>> getBookDetails(String bookId);
+  /// A single catalog book, or `Ok(null)` when it does not exist.
+  Future<Result<CatalogBook?>> getBookDetails(String bookId);
 
-  Future<Result<void>> getBooksByCategory(String categoryId);
+  Future<Result<List<CatalogBook>>> getBooksByCategory(String categoryId);
 
-  Future<Result<void>> getBooksByAuthor(String authorId);
+  Future<Result<List<CatalogBook>>> getBooksByAuthor(String authorId);
+
+  /// Adds a catalog book to the signed-in user's cloud bookshelf as
+  /// `want_to_read`. MVP: catalog books have no downloadable file yet, so
+  /// the shelf entry is a marker, not a readable local book.
+  Future<Result<void>> addToShelf(String bookId);
 }

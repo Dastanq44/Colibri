@@ -159,6 +159,15 @@
   "settingsIncrease": "Increase",
   "tableOfContents": "Table of contents",
   "tocEmpty": "No chapters",
+  "catalogSearchHint": "Search books",
+  "catalogEmpty": "The catalog is empty for now.",
+  "catalogUnavailable": "Could not load the catalog. Check your connection.",
+  "catalogRetry": "Retry",
+  "bookDetailAddToShelf": "Add to My Books",
+  "bookDetailAdded": "Added to My Books",
+  "bookDetailSignInToAdd": "Sign in to add this book to My Books.",
+  "bookDetailAbout": "About this book",
+  "bookDetailReviews": "Reviews",
   "homeGreeting": "Welcome back",
   "homeContinueReading": "Continue reading",
   "homeGoalTitle": "Daily goal",
@@ -202,6 +211,16 @@
   "annotationBookmarkUntitled": "Bookmark",
   "readerEpubError": "Could not read this EPUB file.",
   "readerNoText": "No readable text was found in this book.",
+  "syncConflictTitle": "Two reading positions found",
+  "syncConflictBody": "This device: {local}% · Cloud: {cloud}%. Continue from the later position?",
+  "@syncConflictBody": {
+    "placeholders": {
+      "local": { "type": "int" },
+      "cloud": { "type": "int" }
+    }
+  },
+  "syncConflictKeepLocal": "Keep this position",
+  "syncConflictUseCloud": "Continue from cloud",
   "syncSectionTitle": "Sync",
   "syncNow": "Sync now",
   "syncRunning": "Syncing…",

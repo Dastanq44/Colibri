@@ -8,6 +8,7 @@ import '../../../core/errors/failures.dart';
 import '../../../core/result/result.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/repositories/sync_repository.dart';
+import '../domain/remote_progress.dart';
 import '../domain/sync_entity_type.dart';
 import '../domain/sync_operation.dart';
 import '../domain/sync_result.dart';
@@ -31,6 +32,28 @@ class SupabaseSyncRepository implements SyncRepository {
 
   @override
   Stream<bool> syncing() => _syncing.stream;
+
+  @override
+  Future<Result<RemoteProgress?>> fetchRemoteProgress(String bookId) async {
+    final client = _client;
+    if (client == null) return const Err(BackendUnavailableFailure());
+    final userId = client.auth.currentUser?.id;
+    if (userId == null) {
+      return const Err(UnauthorizedFailure('Sign in to sync.'));
+    }
+    try {
+      final row = await client
+          .from('reading_progress')
+          .select('locator_type, locator_value, percent, page_number, updated_at')
+          .eq('user_id', userId)
+          .eq('book_id', localBookIdToUuid(bookId))
+          .maybeSingle();
+      if (row == null) return const Ok(null);
+      return Ok(RemoteProgress.fromRow(row));
+    } catch (e) {
+      return Err(NetworkFailure('Could not fetch cloud progress: $e'));
+    }
+  }
 
   @override
   Future<Result<SyncRunResult>> syncNow({bool retryFailed = false}) async {

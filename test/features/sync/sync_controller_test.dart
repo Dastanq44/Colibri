@@ -3,6 +3,7 @@ import 'package:colibri/core/result/result.dart';
 import 'package:colibri/data/repositories/sync_repository.dart';
 import 'package:colibri/features/sync/application/sync_controller.dart';
 import 'package:colibri/features/sync/application/sync_providers.dart';
+import 'package:colibri/features/sync/domain/remote_progress.dart';
 import 'package:colibri/features/sync/domain/sync_result.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +19,10 @@ class _FakeSyncRepository implements SyncRepository {
 
   @override
   Stream<bool> syncing() => const Stream<bool>.empty();
+
+  @override
+  Future<Result<RemoteProgress?>> fetchRemoteProgress(String bookId) async =>
+      const Ok(null);
 }
 
 ProviderContainer _container(SyncRepository repo) {

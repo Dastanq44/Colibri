@@ -11,6 +11,9 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/result/result.dart';
 import '../../notes/application/notes_providers.dart';
 import '../../notes/presentation/annotations_sheet.dart';
+import '../../sync/application/sync_providers.dart';
+import '../../sync/domain/progress_conflict_policy.dart';
+import '../../sync/domain/remote_progress.dart';
 import '../application/reader_controller.dart';
 import '../application/reader_position_policy.dart';
 import '../domain/reader_locator.dart';
@@ -313,6 +316,55 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     _showResultSnack(result is Ok ? l10n.noteAdded : null);
   }
 
+  bool _cloudPositionChecked = false;
+
+  /// Compares the cloud reading position against local once per open
+  /// (TASK-1203): a significantly *later* cloud position offers a choice;
+  /// anything else resolves silently. Failures never block reading.
+  Future<void> _maybePromptCloudPosition(ReaderReady state) async {
+    if (_cloudPositionChecked) return;
+    _cloudPositionChecked = true;
+
+    final result =
+        await ref.read(syncRepositoryProvider).fetchRemoteProgress(widget.bookId);
+    if (!mounted || result is! Ok<RemoteProgress?>) return;
+    final remote = result.value;
+    final offset = remote?.textOffset;
+    if (remote == null || offset == null) return;
+
+    final local = ref.read(readerControllerProvider(widget.bookId));
+    if (local is! ReaderReady) return;
+    if (!isSignificantProgressConflict(
+      localPercent: local.progress.percent,
+      remotePercent: remote.percent,
+    )) {
+      return;
+    }
+
+    final l10n = AppLocalizations.of(context);
+    final useCloud = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.syncConflictTitle),
+        content: Text(l10n.syncConflictBody(
+          local.progress.percent.round(),
+          remote.percent.round(),
+        )),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l10n.syncConflictKeepLocal),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(l10n.syncConflictUseCloud),
+          ),
+        ],
+      ),
+    );
+    if (useCloud == true && mounted) _jumpTo(offset);
+  }
+
   /// Jumps both reading surfaces to [offset]. The device may have rotated
   /// while a sheet was open (mode switched underneath it); seeding the fast
   /// engine too keeps the jump from being clobbered at the next handoff.
@@ -402,6 +454,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
           previous.progress.hasNext &&
           !next.progress.hasNext) {
         _haptic(HapticFeedback.mediumImpact);
+      }
+      // Cloud-position check (TASK-1203) once the book first becomes ready.
+      if (previous is! ReaderReady && next is ReaderReady) {
+        _maybePromptCloudPosition(next);
       }
     });
 
