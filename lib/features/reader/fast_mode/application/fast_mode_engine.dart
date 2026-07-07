@@ -17,10 +17,15 @@ class FastModeEngine extends ChangeNotifier {
   FastModeEngine({
     FastModeSettings? settings,
     this.onSavePosition,
+    this.onWpmChanged,
   }) : _state = FastModeState.initial(settings ?? FastModeSettings.defaults());
 
   /// Called to persist the current token position (token + percent).
   final Future<void> Function(FastToken token, double percent)? onSavePosition;
+
+  /// Called when the user changes WPM, so it persists globally (plan 8.3:
+  /// "WPM is saved globally") and survives closing the book.
+  final void Function(int wpm)? onWpmChanged;
 
   FastModeState _state;
   FastModeState get state => _state;
@@ -107,6 +112,7 @@ class FastModeEngine extends ChangeNotifier {
     if (clamped == _state.wpm) return false;
     _wpmTouched = true;
     _set(_state.copyWith(wpm: clamped));
+    onWpmChanged?.call(clamped);
     if (_state.isPlaying) _startTimer(); // apply new interval
     return true;
   }

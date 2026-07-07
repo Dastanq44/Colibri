@@ -77,13 +77,29 @@ class SupabaseAuthRepository implements AuthRepository {
 
   @override
   Future<Result<void>> deleteAccount() async {
-    if (_client == null) return const Err(BackendUnavailableFailure());
-    // Self-deletion requires a privileged server step (service role). Until an
-    // edge function exists, surface a clear, typed failure rather than
-    // pretending the account was deleted.
-    return const Err(
-      UnknownFailure('Account deletion is not available yet.'),
-    );
+    final client = _client;
+    if (client == null) return const Err(BackendUnavailableFailure());
+    if (client.auth.currentUser == null) {
+      return const Err(UnauthorizedFailure('Sign in first.'));
+    }
+    // Self-deletion needs the service role, so it runs in the
+    // `delete-account` edge function against the verified caller only.
+    try {
+      final response = await client.functions.invoke('delete-account');
+      if (response.status != 200) {
+        return const Err(
+          UnknownFailure('Account deletion failed. Try again later.'),
+        );
+      }
+      // The auth user is gone server-side; drop the local session too.
+      await client.auth.signOut();
+      return const Ok(null);
+    } catch (_) {
+      // Covers "function not deployed" (404) and connectivity errors.
+      return const Err(
+        UnknownFailure('Account deletion is unavailable right now.'),
+      );
+    }
   }
 
   /// Runs [action] with a non-null client, mapping common Supabase errors to

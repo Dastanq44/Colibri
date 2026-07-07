@@ -36,6 +36,9 @@ final fastModeEngineProvider =
         mode: ReaderMode.fast,
       );
     },
+    // Tap-adjusted WPM becomes the new global default (plan 8.3).
+    onWpmChanged: (wpm) =>
+        ref.read(readerSettingsRepositoryProvider).setDefaultWpm(wpm),
   );
 
   // Apply live settings changes (WPM bounds, adjacent context, speed lock).
