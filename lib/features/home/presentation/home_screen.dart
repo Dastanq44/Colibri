@@ -4,8 +4,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
+import '../../../data/repositories/analytics_repository.dart';
 import '../../../shared/models/book_format.dart';
+import '../../catalog/domain/catalog_book.dart';
 import '../../library/domain/library_book.dart';
+import '../../recommendations/application/recommendation_providers.dart';
+import '../../recommendations/domain/recommendation_rail.dart';
 import '../application/home_providers.dart';
 
 /// Home (plan section 7.2): greeting, Continue Reading from local progress,
@@ -44,9 +48,85 @@ class HomeScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               _SectionHeader(l10n.homeQuickActions),
               _QuickActions(l10n: l10n),
+              for (final rail
+                  in ref.watch(homeRailsProvider).valueOrNull ??
+                      const <RecommendationRail>[]) ...<Widget>[
+                const SizedBox(height: 16),
+                _SectionHeader(_railTitle(l10n, rail.reason)),
+                _RecommendationRailRow(rail: rail),
+              ],
             ],
           ),
       },
+    );
+  }
+
+  String _railTitle(AppLocalizations l10n, RecommendationReason reason) =>
+      switch (reason) {
+        RecommendationReason.sameAuthor => l10n.recoSameAuthor,
+        RecommendationReason.goodForFastMode => l10n.recoGoodForFastMode,
+        RecommendationReason.fromCatalog => l10n.recoFromCatalog,
+      };
+}
+
+class _RecommendationRailRow extends ConsumerWidget {
+  const _RecommendationRailRow({required this.rail});
+
+  final RecommendationRail rail;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      height: 120,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: rail.books.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final CatalogBook book = rail.books[index];
+          return SizedBox(
+            width: 150,
+            child: Card(
+              margin: EdgeInsets.zero,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  ref.read(analyticsRepositoryProvider).logEvent(
+                    'recommendation_clicked',
+                    params: {'reason': rail.reason.name},
+                  );
+                  context.push(AppRoutes.bookDetail(book.id));
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Icon(Icons.menu_book_outlined,
+                          color: theme.colorScheme.primary),
+                      const SizedBox(height: 8),
+                      Text(
+                        book.title,
+                        style: theme.textTheme.bodyMedium,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (book.authorDisplay.isNotEmpty)
+                        Text(
+                          book.authorDisplay,
+                          style: theme.textTheme.bodySmall,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

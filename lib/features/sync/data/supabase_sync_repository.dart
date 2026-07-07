@@ -151,7 +151,16 @@ class SupabaseSyncRepository implements SyncRepository {
 
     switch (type!) {
       case SyncEntityType.book:
-        await client.from('books').upsert(booksRow(entityUuid, payload));
+        // Plain insert with duplicate-key-as-success, NOT an upsert: every
+        // ON CONFLICT arbiter needs SELECT visibility of the existing row,
+        // and the books RLS hides upload rows until their book_files row
+        // lands (which happens after this step). Book metadata is immutable
+        // post-import in MVP. Verified against the live project.
+        try {
+          await client.from('books').insert(booksRow(entityUuid, payload));
+        } on PostgrestException catch (e) {
+          if (e.code != '23505') rethrow; // 23505 = already created earlier
+        }
       case SyncEntityType.bookshelf:
         await client.from('user_bookshelf').upsert(
               bookshelfRow(userId, entityUuid, payload),

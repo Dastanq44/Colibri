@@ -9,6 +9,7 @@ import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/theme/reader_theme.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/result/result.dart';
+import '../../../data/repositories/analytics_repository.dart';
 import '../../notes/application/notes_providers.dart';
 import '../../notes/presentation/annotations_sheet.dart';
 import '../../sync/application/sync_providers.dart';
@@ -16,6 +17,7 @@ import '../../sync/domain/progress_conflict_policy.dart';
 import '../../sync/domain/remote_progress.dart';
 import '../application/reader_controller.dart';
 import '../application/reader_position_policy.dart';
+import '../application/reader_providers.dart';
 import '../domain/reader_locator.dart';
 import '../domain/reader_locator_types.dart';
 import '../domain/reader_mode.dart';
@@ -48,6 +50,71 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   ReaderMode? _pendingMode;
   Timer? _switchTimer;
   Orientation? _lastOrientation;
+
+  // Reading-session tracking (plan §10.2): one session per continuous
+  // stretch in a mode; mode switches roll the session over.
+  String? _sessionId;
+  DateTime? _sessionStartedAt;
+  ReaderMode _sessionMode = ReaderMode.normal;
+  int _sessionFastWordsStart = 0;
+
+  Future<void> _startSession(ReaderMode mode) async {
+    if (_sessionId != null) return;
+    // Read providers before any await: this may race widget disposal.
+    final sessions = ref.read(sessionRepositoryProvider);
+    final analytics = ref.read(analyticsRepositoryProvider);
+    _sessionMode = mode;
+    _sessionStartedAt = DateTime.now();
+    _sessionFastWordsStart = mode == ReaderMode.fast
+        ? ref.read(fastModeEngineProvider(widget.bookId)).state.wordsRead
+        : 0;
+    _sessionId =
+        await sessions.startSession(bookId: widget.bookId, mode: mode.wire);
+    unawaited(analytics
+        .logEvent('reading_session_started', params: {'mode': mode.wire}));
+  }
+
+  Future<void> _endSession() async {
+    final id = _sessionId;
+    final startedAt = _sessionStartedAt;
+    if (id == null || startedAt == null) return;
+    _sessionId = null;
+    _sessionStartedAt = null;
+    // Read providers before any await: dispose calls this fire-and-forget.
+    final sessions = ref.read(sessionRepositoryProvider);
+    final analytics = ref.read(analyticsRepositoryProvider);
+    final duration = DateTime.now().difference(startedAt);
+    int? words;
+    int? avgWpm;
+    if (_sessionMode == ReaderMode.fast) {
+      final engineWords =
+          ref.read(fastModeEngineProvider(widget.bookId)).state.wordsRead;
+      words = (engineWords - _sessionFastWordsStart).clamp(0, 1 << 31);
+      // A measured pace needs a meaningful window and actual words.
+      if (duration.inSeconds >= 30 && words > 0) {
+        avgWpm = (words * 60 / duration.inSeconds).round();
+      }
+    }
+    await sessions.endSession(
+      id,
+      duration: duration,
+      wordsRead: words,
+      avgWpm: avgWpm,
+    );
+    unawaited(analytics.logEvent(
+      'reading_session_ended',
+      params: {
+        'mode': _sessionMode.wire,
+        'duration_seconds': duration.inSeconds,
+        if (avgWpm != null) 'avg_wpm': avgWpm,
+      },
+    ));
+  }
+
+  Future<void> _rolloverSession(ReaderMode to) async {
+    await _endSession();
+    await _startSession(to);
+  }
 
   @override
   void initState() {
@@ -83,6 +150,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
         saveFast: () =>
             ref.read(fastModeEngineProvider(widget.bookId)).savePosition(),
       );
+      unawaited(_endSession());
     } catch (_) {
       // Ignore — never throw from dispose.
     }
@@ -101,6 +169,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
         // Pause (not just save) so fast mode resumes paused, not playing.
         saveFast: () => ref.read(fastModeEngineProvider(widget.bookId)).pause(),
       );
+      unawaited(_endSession());
+    } else if (state == AppLifecycleState.resumed) {
+      // A new stretch of reading begins when the app comes back.
+      if (ref.read(readerControllerProvider(widget.bookId)) is ReaderReady) {
+        unawaited(_startSession(_effectiveMode));
+      }
     }
   }
 
@@ -155,6 +229,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     if (to == ReaderMode.fast && readerState is ReaderReady) {
       _haptic(HapticFeedback.lightImpact);
     }
+    if (readerState is ReaderReady) {
+      _rolloverSession(to);
+      unawaited(ref.read(analyticsRepositoryProvider).logEvent(
+            to == ReaderMode.fast
+                ? 'mode_switch_portrait_to_fast'
+                : 'mode_switch_fast_to_portrait',
+          ));
+    }
     setState(() {
       _effectiveMode = to;
       _pendingMode = null;
@@ -190,6 +272,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   void _toggleModeLock(bool currentlyLocked) {
     final locked = !currentlyLocked;
     _haptic(HapticFeedback.selectionClick);
+    unawaited(ref
+        .read(analyticsRepositoryProvider)
+        .logEvent('mode_lock_toggled', params: {'locked': locked}));
     ref.read(readerSettingsRepositoryProvider).setModeLock(locked);
     // React with the fresh value now — the settings stream only re-emits after
     // the async write lands, so reading it here would race (and lose) the
@@ -296,6 +381,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
           locator: _currentLocator(state),
           label: label,
         );
+    if (result is Ok && mounted) {
+      unawaited(
+          ref.read(analyticsRepositoryProvider).logEvent('bookmark_created'));
+    }
     _showResultSnack(result is Ok ? l10n.bookmarkAdded : null);
   }
 
@@ -313,6 +402,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
           locator: _currentLocator(state),
           noteText: text,
         );
+    if (result is Ok && mounted) {
+      unawaited(
+          ref.read(analyticsRepositoryProvider).logEvent('note_created'));
+    }
     _showResultSnack(result is Ok ? l10n.noteAdded : null);
   }
 
@@ -455,9 +548,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
           !next.progress.hasNext) {
         _haptic(HapticFeedback.mediumImpact);
       }
-      // Cloud-position check (TASK-1203) once the book first becomes ready.
+      // First ready: session starts, cloud position is checked once, and
+      // the open is tracked (TASK-1203 / TASK-1503).
       if (previous is! ReaderReady && next is ReaderReady) {
+        _startSession(_effectiveMode);
         _maybePromptCloudPosition(next);
+        unawaited(ref
+            .read(analyticsRepositoryProvider)
+            .logEvent('book_opened', params: {'format': next.document.format}));
       }
     });
 

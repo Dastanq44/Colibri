@@ -16,4 +16,10 @@ abstract interface class LibraryRepository {
 
   /// Removes all local records for the book (and its on-disk file).
   Future<Result<void>> removeBookFromLibrary(String bookId);
+
+  /// Pulls the signed-in user's cloud bookshelf and inserts entries missing
+  /// locally (e.g. catalog books added on another device or via Book
+  /// Detail). Local entries are never overwritten — local-first wins.
+  /// Returns the number of newly added entries.
+  Future<Result<int>> refreshFromCloud();
 }

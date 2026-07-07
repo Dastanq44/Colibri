@@ -1,8 +1,14 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Boundary for product analytics. The concrete provider (Firebase Analytics
-/// or Amplitude) is wired in Phase 15; for now a no-op implementation keeps
-/// call sites safe and ensures no private book content is ever sent.
+import '../../core/config/app_config.dart';
+
+/// Boundary for product analytics (Phase 15).
+///
+/// The vendor sink (Amplitude — chosen over Firebase Analytics for its
+/// key-only setup) plugs in here once an AMPLITUDE_API_KEY exists; until
+/// then events flow to a debug sink in dev and nowhere in release.
 ///
 /// Rules (from the project context): never log private book text, note
 /// content, selected text, or raw file content.
@@ -15,7 +21,7 @@ abstract interface class AnalyticsRepository {
   Future<void> setEnabled(bool enabled);
 }
 
-/// Default no-op implementation used until Phase 15.
+/// No-op sink: used when analytics is disabled by configuration.
 class NoOpAnalyticsRepository implements AnalyticsRepository {
   const NoOpAnalyticsRepository();
 
@@ -29,8 +35,33 @@ class NoOpAnalyticsRepository implements AnalyticsRepository {
   Future<void> setEnabled(bool enabled) async {}
 }
 
-/// App-wide analytics provider. Overridden with a real implementation in
-/// Phase 15.
-final analyticsRepositoryProvider = Provider<AnalyticsRepository>(
-  (ref) => const NoOpAnalyticsRepository(),
-);
+/// Development sink: prints events to the log so instrumentation can be
+/// verified before a vendor key exists. Honors [setEnabled].
+class DebugAnalyticsRepository implements AnalyticsRepository {
+  bool _enabled = true;
+
+  @override
+  Future<void> logEvent(
+    String name, {
+    Map<String, Object?> params = const {},
+  }) async {
+    if (!_enabled) return;
+    developer.log(params.isEmpty ? name : '$name $params', name: 'analytics');
+  }
+
+  @override
+  Future<void> logScreenView(String screenName) =>
+      logEvent('screen_view_$screenName');
+
+  @override
+  Future<void> setEnabled(bool enabled) async => _enabled = enabled;
+}
+
+/// App-wide analytics, gated by [AppConfig.analyticsEnabled]. Swap the debug
+/// sink for the Amplitude adapter when the key lands.
+final analyticsRepositoryProvider = Provider<AnalyticsRepository>((ref) {
+  final config = ref.watch(appConfigProvider);
+  return config.analyticsEnabled
+      ? DebugAnalyticsRepository()
+      : const NoOpAnalyticsRepository();
+});

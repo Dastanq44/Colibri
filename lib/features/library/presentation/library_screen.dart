@@ -32,6 +32,8 @@ class LibraryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final booksAsync = ref.watch(myBooksProvider);
+    // Kick off the once-per-session cloud-shelf pull (no-op signed out).
+    ref.watch(libraryCloudRefreshProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -223,7 +225,13 @@ class _BookCard extends ConsumerWidget {
           ],
         ),
         isThreeLine: true,
-        onTap: () => context.push(AppRoutes.reader(book.id)),
+        // Cloud-only entries (no downloaded file) open Book Detail — there
+        // is nothing to read locally yet.
+        onTap: () => context.push(
+          !book.hasLocalFile && book.cloudBookId != null
+              ? AppRoutes.bookDetail(book.cloudBookId!)
+              : AppRoutes.reader(book.id),
+        ),
         trailing: PopupMenuButton<_CardAction>(
           tooltip: l10n.libraryChangeStatus,
           onSelected: (action) => _onAction(context, ref, l10n, action),

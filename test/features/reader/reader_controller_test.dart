@@ -1,5 +1,6 @@
 import 'package:colibri/core/errors/failures.dart';
 import 'package:colibri/core/result/result.dart';
+import 'package:colibri/data/repositories/analytics_repository.dart';
 import 'package:colibri/data/repositories/reader_repository.dart';
 import 'package:colibri/features/reader/application/reader_controller.dart';
 import 'package:colibri/features/reader/application/reader_providers.dart';
@@ -101,6 +102,8 @@ ProviderContainer _container(ReaderLocator? saved) {
   );
   final c = ProviderContainer(
     overrides: <Override>[
+      analyticsRepositoryProvider
+          .overrideWithValue(const NoOpAnalyticsRepository()),
       readerRepositoryProvider.overrideWithValue(_FakeReaderRepo(doc, saved)),
     ],
   );
@@ -190,7 +193,9 @@ void main() {
       );
       final c = ProviderContainer(
         overrides: <Override>[
-          readerRepositoryProvider.overrideWithValue(_FakeReaderRepo(doc, null)),
+          analyticsRepositoryProvider
+          .overrideWithValue(const NoOpAnalyticsRepository()),
+      readerRepositoryProvider.overrideWithValue(_FakeReaderRepo(doc, null)),
         ],
       );
       addTearDown(c.dispose);
@@ -237,7 +242,9 @@ void main() {
     ProviderContainer pdfContainer(_FakeReaderRepo fake) {
       final c = ProviderContainer(
         overrides: <Override>[
-          readerRepositoryProvider.overrideWithValue(fake),
+          analyticsRepositoryProvider
+          .overrideWithValue(const NoOpAnalyticsRepository()),
+      readerRepositoryProvider.overrideWithValue(fake),
         ],
       );
       addTearDown(c.dispose);
@@ -322,7 +329,9 @@ void main() {
       );
       final c = ProviderContainer(
         overrides: <Override>[
-          readerRepositoryProvider.overrideWithValue(fake),
+          analyticsRepositoryProvider
+          .overrideWithValue(const NoOpAnalyticsRepository()),
+      readerRepositoryProvider.overrideWithValue(fake),
         ],
       );
       addTearDown(c.dispose);

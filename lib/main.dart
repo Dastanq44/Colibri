@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app/app.dart';
@@ -20,15 +21,29 @@ Future<void> main() async {
   // keys are configured, so the placeholder app still boots without a backend.
   final SupabaseClient? supabaseClient = await initSupabase(config);
 
-  // NOTE: Sentry initialization (Phase 15) hooks in here once that phase lands.
+  final app = ProviderScope(
+    overrides: <Override>[
+      appConfigProvider.overrideWithValue(config),
+      supabaseClientProvider.overrideWithValue(supabaseClient),
+    ],
+    child: const ColibriApp(),
+  );
 
-  runApp(
-    ProviderScope(
-      overrides: <Override>[
-        appConfigProvider.overrideWithValue(config),
-        supabaseClientProvider.overrideWithValue(supabaseClient),
-      ],
-      child: const ColibriApp(),
-    ),
+  // Crash reporting (TASK-1502): only when a DSN is configured — dev without
+  // one runs plain. Reader errors are captured without book content; Sentry
+  // includes app version and device context by default.
+  if (config.sentryDsn.isEmpty) {
+    runApp(app);
+    return;
+  }
+  await SentryFlutter.init(
+    (options) {
+      options
+        ..dsn = config.sentryDsn
+        ..environment = config.environment.name
+        ..tracesSampleRate = 0.2
+        ..sendDefaultPii = false;
+    },
+    appRunner: () => runApp(SentryWidget(child: app)),
   );
 }

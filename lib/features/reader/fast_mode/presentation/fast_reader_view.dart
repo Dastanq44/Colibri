@@ -8,6 +8,7 @@ import '../../../../app/localization/generated/app_localizations.dart';
 import '../../../../app/theme/reader_fonts.dart';
 import '../../../../app/theme/reader_theme.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../data/repositories/analytics_repository.dart';
 import '../../settings/application/reader_settings_providers.dart';
 import '../application/fast_mode_engine.dart';
 import '../application/fast_mode_providers.dart';
@@ -90,6 +91,8 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
     }
     if (engine.decreaseWpm()) {
       _haptic(HapticFeedback.selectionClick);
+      unawaited(ref.read(analyticsRepositoryProvider).logEvent(
+          'wpm_changed', params: {'wpm': engine.state.wpm, 'delta': -1}));
       _flash('-${engine.state.settings.step} ${l10n.wpm}');
     }
   }
@@ -101,12 +104,16 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
     }
     if (engine.increaseWpm()) {
       _haptic(HapticFeedback.selectionClick);
+      unawaited(ref.read(analyticsRepositoryProvider).logEvent(
+          'wpm_changed', params: {'wpm': engine.state.wpm, 'delta': 1}));
       _flash('+${engine.state.settings.step} ${l10n.wpm}');
     }
   }
 
   void _toggle(FastModeEngine engine, AppLocalizations l10n) {
     engine.togglePlayPause();
+    unawaited(ref.read(analyticsRepositoryProvider).logEvent(
+        'pause_play_toggled', params: {'playing': engine.state.isPlaying}));
     if (!engine.state.isPlaying) _flash(l10n.fastPaused);
   }
 

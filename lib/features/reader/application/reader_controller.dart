@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/errors/failures.dart';
 import '../../../core/result/result.dart';
+import '../../../data/repositories/analytics_repository.dart';
 import '../domain/pdf_book_source.dart';
 import '../domain/reader_document.dart';
 import '../domain/reader_locator.dart';
@@ -228,6 +231,11 @@ class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
       percent: s.progress.percent,
     );
     await ref.read(readerRepositoryProvider).saveLocator(arg, locator);
+    // TASK-1503: checkpoint tracking (position only — never book content).
+    unawaited(ref.read(analyticsRepositoryProvider).logEvent(
+      'progress_checkpoint_saved',
+      params: {'percent': s.progress.percent.round()},
+    ));
   }
 }
 

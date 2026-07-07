@@ -34,4 +34,8 @@ class SessionsDao extends DatabaseAccessor<AppDatabase>
   Future<List<LocalSession>> getForBook(String bookId) =>
       (select(localReadingSessions)..where((s) => s.bookId.equals(bookId)))
           .get();
+
+  /// Removes a session (used for below-threshold noise sessions).
+  Future<void> deleteSession(String id) =>
+      (delete(localReadingSessions)..where((s) => s.id.equals(id))).go();
 }

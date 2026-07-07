@@ -13,6 +13,8 @@ class LibraryBook {
     required this.percent,
     required this.isFastModeSupported,
     this.lastOpenedAt,
+    this.hasLocalFile = true,
+    this.cloudBookId,
   });
 
   final String id;
@@ -26,4 +28,11 @@ class LibraryBook {
 
   final bool isFastModeSupported;
   final DateTime? lastOpenedAt;
+
+  /// False for cloud-shelf entries with no downloaded file (catalog adds):
+  /// they open Book Detail, not the reader.
+  final bool hasLocalFile;
+
+  /// The Supabase books.id when known (navigates to catalog Book Detail).
+  final String? cloudBookId;
 }

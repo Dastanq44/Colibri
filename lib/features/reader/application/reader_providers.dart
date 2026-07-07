@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/local/database_providers.dart';
 import '../../../data/repositories/local_reader_repository.dart';
+import '../../../data/repositories/local_session_repository.dart';
 import '../../../data/repositories/reader_repository.dart';
 import '../../sync/application/sync_providers.dart';
 import '../data/text_pagination_service.dart';
@@ -15,4 +16,9 @@ final readerRepositoryProvider = Provider<ReaderRepository>((ref) {
     deviceIdService: ref.watch(deviceIdServiceProvider),
     syncQueue: ref.watch(localSyncQueueRepositoryProvider),
   );
+});
+
+/// Records reading sessions (per mode) for stats and analytics.
+final sessionRepositoryProvider = Provider<LocalSessionRepository>((ref) {
+  return LocalSessionRepository(ref.watch(appDatabaseProvider));
 });

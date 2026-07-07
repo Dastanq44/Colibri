@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/analytics/analytics_route_observer.dart';
+import '../../data/repositories/analytics_repository.dart';
 import '../../features/auth/presentation/auth_screen.dart';
 import '../../features/book_detail/presentation/book_detail_screen.dart';
 import '../../features/catalog/presentation/catalog_screen.dart';
@@ -23,10 +25,16 @@ final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 /// app root shows a splash until the onboarding flag resolves, so the
 /// redirect below always sees a settled value.
 final goRouterProvider = Provider<GoRouter>((ref) {
+  final analytics = ref.watch(analyticsRepositoryProvider);
+  // A navigator accepts an observer only once: one for the root, one per
+  // tab branch (see the shell below).
+  AnalyticsRouteObserver observer() => AnalyticsRouteObserver(analytics);
+
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: AppRoutes.home,
     debugLogDiagnostics: true,
+    observers: <NavigatorObserver>[observer()],
     redirect: (context, state) {
       // First-launch gate only: force onboarding until completed. Completed
       // users may still open /onboarding explicitly (e.g. from Home) — no
@@ -82,6 +90,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             AppShell(navigationShell: navigationShell),
         branches: <StatefulShellBranch>[
           StatefulShellBranch(
+            observers: <NavigatorObserver>[observer()],
             routes: <RouteBase>[
               GoRoute(
                 path: AppRoutes.home,
@@ -91,6 +100,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
           StatefulShellBranch(
+            observers: <NavigatorObserver>[observer()],
             routes: <RouteBase>[
               GoRoute(
                 path: AppRoutes.catalog,
@@ -100,6 +110,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
           StatefulShellBranch(
+            observers: <NavigatorObserver>[observer()],
             routes: <RouteBase>[
               GoRoute(
                 path: AppRoutes.library,
@@ -109,6 +120,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
           StatefulShellBranch(
+            observers: <NavigatorObserver>[observer()],
             routes: <RouteBase>[
               GoRoute(
                 path: AppRoutes.profile,

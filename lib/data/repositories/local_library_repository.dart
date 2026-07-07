@@ -1,24 +1,30 @@
 import 'package:drift/drift.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 
 import '../../core/errors/failures.dart';
 import '../../core/result/result.dart';
+import '../../features/catalog/domain/catalog_book.dart';
 import '../../features/import/data/file_storage_service.dart';
 import '../../features/library/domain/library_book.dart';
 import '../../features/sync/data/local_sync_queue_repository.dart';
 import '../../shared/models/book_format.dart';
 import '../../shared/models/bookshelf_status.dart';
 import '../local/app_database.dart';
+import '../local/sync_status.dart';
 import 'library_repository.dart';
 
 /// Local-first [LibraryRepository] backed by Drift. Joins books + bookshelf +
 /// progress into [LibraryBook] views. Local changes are enqueued for later
-/// cloud sync; no direct Supabase access here.
+/// cloud sync; [refreshFromCloud] pulls missing cloud-shelf entries.
 class LocalLibraryRepository implements LibraryRepository {
-  LocalLibraryRepository(this._db, this._storage, this._sync);
+  LocalLibraryRepository(this._db, this._storage, this._sync,
+      {SupabaseClient? client})
+      : _client = client;
 
   final AppDatabase _db;
   final FileStorageService _storage;
   final LocalSyncQueueRepository _sync;
+  final SupabaseClient? _client;
 
   JoinedSelectStatement<HasResultSet, dynamic> _libraryQuery() {
     return _db.select(_db.localBooks).join(<Join>[
@@ -48,6 +54,8 @@ class LocalLibraryRepository implements LibraryRepository {
       lastOpenedAt: book.lastOpenedAt == null
           ? null
           : DateTime.tryParse(book.lastOpenedAt!),
+      hasLocalFile: book.fileLocalPath.isNotEmpty,
+      cloudBookId: book.cloudBookId,
     );
   }
 
@@ -133,5 +141,64 @@ class LocalLibraryRepository implements LibraryRepository {
       return Err(StorageFailure('Removed records, but file cleanup failed: $e'));
     }
     return const Ok(null);
+  }
+
+  @override
+  Future<Result<int>> refreshFromCloud() async {
+    final client = _client;
+    if (client == null) return const Err(BackendUnavailableFailure());
+    final userId = client.auth.currentUser?.id;
+    if (userId == null) {
+      return const Err(UnauthorizedFailure('Sign in to refresh.'));
+    }
+    try {
+      final rows = await client
+          .from('user_bookshelf')
+          .select('book_id, status, '
+              'books(id, title, subtitle, description, language, format, '
+              'cover_url, is_fast_mode_supported, book_authors(authors(name)))')
+          .eq('user_id', userId);
+
+      var added = 0;
+      for (final row in rows) {
+        final bookRow = (row['books'] as Map?)?.cast<String, dynamic>();
+        final cloudId = row['book_id'] as String?;
+        if (bookRow == null || cloudId == null) continue;
+
+        // Cloud uuids reverse to our 32-hex local ids, so books uploaded
+        // from this device map back to their existing local rows.
+        final localId = cloudId.replaceAll('-', '');
+        if (await _db.bookshelfDao.getByBookId(localId) != null) {
+          continue; // local-first: never overwrite an existing entry
+        }
+
+        if (await _db.booksDao.getById(localId) == null) {
+          final book = CatalogBook.fromRow(bookRow);
+          await _db.booksDao.upsertBook(LocalBooksCompanion.insert(
+            id: localId,
+            cloudBookId: Value(cloudId),
+            sourceType: 'catalog',
+            format: book.format,
+            title: book.title,
+            authorDisplay: Value(book.authorDisplay),
+            language: Value(book.language ?? ''),
+            // No downloaded file: the entry opens Book Detail, not the
+            // reader (catalog file delivery is post-MVP).
+            fileLocalPath: '',
+            isFastModeSupported: Value(book.isFastModeSupported),
+            syncStatus: const Value(SyncStatus.synced),
+          ));
+        }
+        await _db.bookshelfDao.upsertEntry(LocalBookshelfCompanion.insert(
+          bookId: localId,
+          status: (row['status'] as String?) ?? BookShelfStatus.wantToRead.wire,
+          syncStatus: const Value(SyncStatus.synced),
+        ));
+        added++;
+      }
+      return Ok(added);
+    } catch (e) {
+      return Err(NetworkFailure('Could not refresh the library: $e'));
+    }
   }
 }

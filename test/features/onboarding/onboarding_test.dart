@@ -2,6 +2,7 @@ import 'package:colibri/app/localization/generated/app_localizations.dart';
 import 'package:colibri/app/router/app_router.dart';
 import 'package:colibri/data/local/app_database.dart';
 import 'package:colibri/data/local/database_providers.dart';
+import 'package:colibri/data/repositories/analytics_repository.dart';
 import 'package:colibri/features/onboarding/application/onboarding_providers.dart';
 import 'package:colibri/features/onboarding/data/onboarding_repository.dart';
 import 'package:colibri/features/onboarding/presentation/onboarding_screen.dart';
@@ -110,6 +111,8 @@ void main() {
       final container = ProviderContainer(
         overrides: <Override>[
           appDatabaseProvider.overrideWithValue(db),
+          analyticsRepositoryProvider
+              .overrideWithValue(const NoOpAnalyticsRepository()),
         ],
       );
       addTearDown(container.dispose);

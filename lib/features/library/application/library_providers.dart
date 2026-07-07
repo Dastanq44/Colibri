@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/result/result.dart';
 import '../../../data/local/database_providers.dart';
+import '../../../data/remote/supabase_client_provider.dart';
 import '../../../data/repositories/library_repository.dart';
 import '../../../data/repositories/local_library_repository.dart';
 import '../../import/application/import_providers.dart';
@@ -12,7 +14,18 @@ final libraryRepositoryProvider = Provider<LibraryRepository>((ref) {
     ref.watch(appDatabaseProvider),
     ref.watch(fileStorageServiceProvider),
     ref.watch(localSyncQueueRepositoryProvider),
+    client: ref.watch(supabaseClientProvider),
   );
+});
+
+/// One cloud-shelf pull per app session (the tab shell keeps this alive).
+/// Failures are silent — the local library never depends on the backend.
+final libraryCloudRefreshProvider = FutureProvider<int>((ref) async {
+  final result = await ref.watch(libraryRepositoryProvider).refreshFromCloud();
+  return switch (result) {
+    Ok(value: final added) => added,
+    Err() => 0,
+  };
 });
 
 /// Reactive list of the user's local books for "My Books".

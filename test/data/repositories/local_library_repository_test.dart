@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:colibri/core/errors/failures.dart';
 import 'package:colibri/core/result/result.dart';
 import 'package:colibri/data/local/app_database.dart';
 import 'package:colibri/data/repositories/local_library_repository.dart';
@@ -9,6 +11,7 @@ import 'package:colibri/features/sync/data/local_sync_queue_repository.dart';
 import 'package:colibri/shared/models/bookshelf_status.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
   late AppDatabase db;
@@ -142,5 +145,98 @@ void main() {
     expect(await db.sessionsDao.getForBook('b1'), isEmpty);
     expect(await db.syncQueueDao.getAll(), isEmpty);
     expect(bookDir.existsSync(), isFalse);
+  });
+
+  group('refreshFromCloud', () {
+    const cloudId = '00000000-0000-0000-0000-0000000000c1';
+    const localId = '000000000000000000000000000000c1';
+
+    Future<SupabaseClient> signedInClient(String url) async {
+      final client = SupabaseClient(url, 'anon-key');
+      await client.auth.setInitialSession(jsonEncode(<String, dynamic>{
+        'access_token': 'header.payload.signature',
+        'token_type': 'bearer',
+        'user': <String, dynamic>{'id': 'user-a'},
+      }));
+      return client;
+    }
+
+    Future<HttpServer> shelfServer() async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((req) {
+        req.response
+          ..statusCode = 200
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode(<Map<String, dynamic>>[
+            <String, dynamic>{
+              'book_id': cloudId,
+              'status': 'want_to_read',
+              'books': <String, dynamic>{
+                'id': cloudId,
+                'title': 'Cloud Book',
+                'format': 'epub',
+                'language': 'en',
+                'is_fast_mode_supported': true,
+                'book_authors': <Map<String, dynamic>>[
+                  <String, dynamic>{
+                    'authors': <String, dynamic>{'name': 'Cloud Author'}
+                  },
+                ],
+              },
+            },
+          ]));
+        req.response.close();
+      });
+      return server;
+    }
+
+    test('requires backend + session', () async {
+      expect(((await repo.refreshFromCloud()) as Err).failure,
+          isA<BackendUnavailableFailure>());
+
+      final client = SupabaseClient('http://127.0.0.1:1', 'anon-key');
+      addTearDown(() => client.dispose());
+      final signedOut = LocalLibraryRepository(
+        db,
+        FileStorageService(baseDirectory: tmp),
+        LocalSyncQueueRepository(db),
+        client: client,
+      );
+      expect(((await signedOut.refreshFromCloud()) as Err).failure,
+          isA<UnauthorizedFailure>());
+    });
+
+    test('pulls missing cloud entries as file-less catalog books, idempotently',
+        () async {
+      final server = await shelfServer();
+      final client = await signedInClient('http://127.0.0.1:${server.port}');
+      addTearDown(() => client.dispose());
+      final cloudRepo = LocalLibraryRepository(
+        db,
+        FileStorageService(baseDirectory: tmp),
+        LocalSyncQueueRepository(db),
+        client: client,
+      );
+
+      expect(((await cloudRepo.refreshFromCloud()) as Ok).value, 1);
+
+      final books = ((await cloudRepo.getMyBooks()) as Ok).value;
+      final book = books.single;
+      expect(book.id, localId);
+      expect(book.title, 'Cloud Book');
+      expect(book.status, BookShelfStatus.wantToRead);
+      expect(book.hasLocalFile, isFalse);
+      expect(book.cloudBookId, cloudId);
+
+      // Second pull adds nothing and leaves the entry untouched.
+      expect(((await cloudRepo.refreshFromCloud()) as Ok).value, 0);
+
+      // A local status change survives further refreshes (local-first).
+      await cloudRepo.updateBookStatus(localId, BookShelfStatus.reading);
+      await cloudRepo.refreshFromCloud();
+      final after = ((await cloudRepo.getMyBooks()) as Ok).value.single;
+      expect(after.status, BookShelfStatus.reading);
+    });
   });
 }
