@@ -1,9 +1,11 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
+import '../../../app/widgets/glass_buttons.dart';
 import '../../../core/errors/failures.dart';
 import '../application/import_controller.dart';
 import '../domain/book_import_status.dart';
@@ -20,7 +22,10 @@ class ImportScreen extends ConsumerWidget {
     final controller = ref.read(importControllerProvider.notifier);
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.importTitle)),
+      appBar: AppBar(
+        leading: const GlassBackButton(),
+        title: Text(l10n.importTitle),
+      ),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -68,7 +73,7 @@ class _Idle extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Icon(Icons.file_upload_outlined,
+        Icon(CupertinoIcons.square_arrow_up,
             size: 72, color: theme.colorScheme.primary),
         const SizedBox(height: 16),
         Text(
@@ -80,7 +85,7 @@ class _Idle extends StatelessWidget {
         const SizedBox(height: 24),
         FilledButton.icon(
           onPressed: onChoose,
-          icon: const Icon(Icons.folder_open_outlined),
+          icon: const Icon(CupertinoIcons.folder),
           label: Text(l10n.importChooseFile),
         ),
       ],
@@ -107,7 +112,7 @@ class _Running extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        const CircularProgressIndicator(),
+        const CupertinoActivityIndicator(radius: 14),
         const SizedBox(height: 16),
         Text(label),
       ],
@@ -136,7 +141,7 @@ class _Success extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Icon(Icons.check_circle_outline,
+        Icon(CupertinoIcons.check_mark_circled,
             size: 72, color: theme.colorScheme.primary),
         const SizedBox(height: 16),
         Text(l10n.importSuccessTitle, style: theme.textTheme.titleMedium),
@@ -152,7 +157,7 @@ class _Success extends StatelessWidget {
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: onGoToLibrary,
-          icon: const Icon(Icons.menu_book_outlined),
+          icon: const Icon(CupertinoIcons.book),
           label: Text(l10n.importGoToLibrary),
         ),
         const SizedBox(height: 8),
@@ -179,7 +184,7 @@ class _ErrorView extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Icon(Icons.error_outline, size: 72, color: theme.colorScheme.error),
+        Icon(CupertinoIcons.exclamationmark_circle, size: 72, color: theme.colorScheme.error),
         const SizedBox(height: 16),
         Text(l10n.importErrorTitle, style: theme.textTheme.titleMedium),
         const SizedBox(height: 4),
@@ -187,7 +192,7 @@ class _ErrorView extends StatelessWidget {
         const SizedBox(height: 24),
         FilledButton.icon(
           onPressed: onRetry,
-          icon: const Icon(Icons.folder_open_outlined),
+          icon: const Icon(CupertinoIcons.folder),
           label: Text(l10n.importChooseFile),
         ),
       ],

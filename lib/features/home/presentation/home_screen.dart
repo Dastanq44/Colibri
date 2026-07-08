@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -106,7 +107,7 @@ class _RecommendationRailRow extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Icon(Icons.menu_book_outlined,
+                      Icon(CupertinoIcons.book,
                           color: theme.colorScheme.primary),
                       const SizedBox(height: 8),
                       Text(
@@ -255,9 +256,9 @@ class _BookCard extends StatelessWidget {
   }
 
   IconData _formatIcon(BookFormat format) => switch (format) {
-        BookFormat.epub => Icons.menu_book_outlined,
-        BookFormat.txt => Icons.article_outlined,
-        BookFormat.pdf => Icons.picture_as_pdf_outlined,
+        BookFormat.epub => CupertinoIcons.book,
+        BookFormat.txt => CupertinoIcons.doc_text,
+        BookFormat.pdf => CupertinoIcons.doc_richtext,
       };
 }
 
@@ -275,7 +276,7 @@ class _GoalCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: <Widget>[
-            const _LeadingIcon(Icons.flag_outlined),
+            const _LeadingIcon(CupertinoIcons.flag),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -307,7 +308,7 @@ class _QuickActions extends StatelessWidget {
       children: <Widget>[
         Expanded(
           child: _ActionButton(
-            icon: Icons.file_upload_outlined,
+            icon: CupertinoIcons.square_arrow_up,
             label: l10n.homeActionImport,
             onTap: () => context.push(AppRoutes.importBook),
           ),
@@ -315,7 +316,7 @@ class _QuickActions extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: _ActionButton(
-            icon: Icons.storefront_outlined,
+            icon: CupertinoIcons.bag,
             label: l10n.homeActionCatalog,
             onTap: () => context.go(AppRoutes.catalog),
           ),
@@ -323,7 +324,7 @@ class _QuickActions extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: _ActionButton(
-            icon: Icons.collections_bookmark_outlined,
+            icon: CupertinoIcons.square_stack,
             label: l10n.homeActionLibrary,
             onTap: () => context.go(AppRoutes.library),
           ),
@@ -397,7 +398,7 @@ class _EmptyHome extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(Icons.auto_stories_outlined,
+            Icon(CupertinoIcons.book,
                 size: 72, color: theme.colorScheme.primary),
             const SizedBox(height: 16),
             Text(l10n.homeEmptyTitle,
@@ -408,7 +409,7 @@ class _EmptyHome extends StatelessWidget {
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: () => context.push(AppRoutes.importBook),
-              icon: const Icon(Icons.file_upload_outlined),
+              icon: const Icon(CupertinoIcons.square_arrow_up),
               label: Text(l10n.homeActionImport),
             ),
           ],

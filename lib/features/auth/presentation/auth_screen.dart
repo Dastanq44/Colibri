@@ -1,9 +1,11 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
+import '../../../app/widgets/glass_buttons.dart';
 import '../../../core/errors/failures.dart';
 import '../../../core/result/result.dart';
 import '../application/auth_providers.dart';
@@ -130,7 +132,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final showDisplayName = _mode == _AuthMode.signUp;
 
     return Scaffold(
-      appBar: AppBar(title: Text(_title(l10n))),
+      appBar: AppBar(
+        leading: const GlassBackButton(),
+        title: Text(_title(l10n)),
+      ),
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -147,10 +152,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 keyboardType: TextInputType.emailAddress,
                 autofillHints: const <String>[AutofillHints.email],
                 textInputAction: TextInputAction.next,
-                decoration: InputDecoration(
-                  labelText: l10n.authEmailLabel,
-                  prefixIcon: const Icon(Icons.email_outlined),
-                ),
+                decoration: InputDecoration(hintText: l10n.authEmailLabel),
                 validator: (v) => _validateEmail(v, l10n),
               ),
               if (showDisplayName) ...<Widget>[
@@ -158,10 +160,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 TextFormField(
                   controller: _displayName,
                   textInputAction: TextInputAction.next,
-                  decoration: InputDecoration(
-                    labelText: l10n.authDisplayNameLabel,
-                    prefixIcon: const Icon(Icons.person_outline),
-                  ),
+                  decoration:
+                      InputDecoration(hintText: l10n.authDisplayNameLabel),
                 ),
               ],
               if (showPassword) ...<Widget>[
@@ -171,10 +171,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   obscureText: true,
                   autofillHints: const <String>[AutofillHints.password],
                   textInputAction: TextInputAction.done,
-                  decoration: InputDecoration(
-                    labelText: l10n.authPasswordLabel,
-                    prefixIcon: const Icon(Icons.lock_outline),
-                  ),
+                  decoration:
+                      InputDecoration(hintText: l10n.authPasswordLabel),
                   validator: (v) => _validatePassword(v, l10n),
                   onFieldSubmitted: (_) => _submitting ? null : _submit(),
                 ),
@@ -183,11 +181,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               FilledButton(
                 onPressed: _submitting ? null : _submit,
                 child: _submitting
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? const CupertinoActivityIndicator(
+                        radius: 10, color: Colors.white)
                     : Text(switch (_mode) {
                         _AuthMode.signIn => l10n.authSignInButton,
                         _AuthMode.signUp => l10n.authSignUpButton,
@@ -250,7 +245,7 @@ class _InfoBanner extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          Icon(Icons.info_outline, color: scheme.onSecondaryContainer),
+          Icon(CupertinoIcons.info_circle, color: scheme.onSecondaryContainer),
           const SizedBox(width: 12),
           Expanded(
             child: Text(

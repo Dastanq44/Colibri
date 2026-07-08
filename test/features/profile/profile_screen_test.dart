@@ -9,6 +9,7 @@ import 'package:colibri/features/auth/domain/auth_user.dart';
 import 'package:colibri/features/profile/application/profile_providers.dart';
 import 'package:colibri/features/profile/domain/profile.dart';
 import 'package:colibri/features/profile/presentation/profile_screen.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -88,9 +89,9 @@ void main() {
     await tester.pumpAndSettle();
 
     // Open the edit-name dialog and submit a new name.
-    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.tap(find.byIcon(CupertinoIcons.pencil));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'New Name');
+    await tester.enterText(find.byType(CupertinoTextField), 'New Name');
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle(); // dialog closed; update awaits the repo
 
@@ -101,7 +102,7 @@ void main() {
     );
     container.read(signedIn.notifier).state = false;
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.edit_outlined), findsNothing);
+    expect(find.byIcon(CupertinoIcons.pencil), findsNothing);
 
     // Completing the update after unmount must not touch ref/context.
     repo.updateCompleter.complete(const Ok(null));

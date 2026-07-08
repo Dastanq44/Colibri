@@ -1,7 +1,9 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
+import '../../../app/widgets/glass_buttons.dart';
 import '../../../core/result/result.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../catalog/application/catalog_providers.dart';
@@ -21,7 +23,10 @@ class BookDetailScreen extends ConsumerWidget {
     final book = ref.watch(catalogBookProvider(bookId));
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.bookDetailTitle)),
+      appBar: AppBar(
+        leading: const GlassBackButton(),
+        title: Text(l10n.bookDetailTitle),
+      ),
       body: switch (book) {
         AsyncData(value: final CatalogBook loaded) =>
           _Detail(book: loaded, l10n: l10n),
@@ -31,7 +36,7 @@ class BookDetailScreen extends ConsumerWidget {
               child: Text(l10n.catalogUnavailable, textAlign: TextAlign.center),
             ),
           ),
-        _ => const Center(child: CircularProgressIndicator()),
+        _ => const Center(child: CupertinoActivityIndicator(radius: 14)),
       },
     );
   }
@@ -89,7 +94,7 @@ class _DetailState extends ConsumerState<_Detail> {
                 color: theme.colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.menu_book_outlined, size: 32),
+              child: const Icon(CupertinoIcons.book, size: 32),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -119,7 +124,7 @@ class _DetailState extends ConsumerState<_Detail> {
         if (signedIn)
           FilledButton.icon(
             onPressed: _adding || _added ? null : _addToShelf,
-            icon: Icon(_added ? Icons.check : Icons.library_add_outlined),
+            icon: Icon(_added ? CupertinoIcons.checkmark : CupertinoIcons.add_circled),
             label: Text(
                 _added ? l10n.bookDetailAdded : l10n.bookDetailAddToShelf),
           )

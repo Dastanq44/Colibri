@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -34,7 +35,7 @@ class AnnotationsSheet extends ConsumerWidget {
       return const SafeArea(
         child: Padding(
           padding: EdgeInsets.all(32),
-          child: Center(child: CircularProgressIndicator()),
+          child: Center(child: CupertinoActivityIndicator()),
         ),
       );
     }
@@ -48,7 +49,7 @@ class AnnotationsSheet extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Icon(Icons.bookmark_outline,
+              Icon(CupertinoIcons.bookmark,
                   size: 48, color: Theme.of(context).colorScheme.primary),
               const SizedBox(height: 12),
               Text(l10n.annotationsEmpty, textAlign: TextAlign.center),
@@ -66,7 +67,7 @@ class AnnotationsSheet extends ConsumerWidget {
           if (bookmarks.isNotEmpty) _SectionHeader(l10n.annotationsBookmarks),
           for (final bookmark in bookmarks)
             _AnnotationTile(
-              icon: Icons.bookmark_outline,
+              icon: CupertinoIcons.bookmark,
               title: bookmark.label ?? l10n.annotationBookmarkUntitled,
               subtitle: _formatDate(context, bookmark.createdAt),
               offset: bookmark.textOffset,
@@ -77,7 +78,7 @@ class AnnotationsSheet extends ConsumerWidget {
           if (notes.isNotEmpty) _SectionHeader(l10n.annotationsNotes),
           for (final note in notes)
             _AnnotationTile(
-              icon: Icons.sticky_note_2_outlined,
+              icon: CupertinoIcons.doc_text,
               title: note.noteText,
               subtitle: _formatDate(context, note.createdAt),
               offset: note.textOffset,
@@ -151,7 +152,7 @@ class _AnnotationTile extends StatelessWidget {
       onTap: target == null ? null : () => onJump(target),
       trailing: IconButton(
         tooltip: deleteTooltip,
-        icon: const Icon(Icons.delete_outline),
+        icon: const Icon(CupertinoIcons.trash),
         onPressed: onDelete,
       ),
     );

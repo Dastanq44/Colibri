@@ -1,10 +1,11 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
-import '../../../app/widgets/large_title_scaffold.dart';
+import '../../../app/widgets/glass_buttons.dart';
 import '../../../core/errors/failures.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../sync/application/sync_controller.dart';
@@ -21,23 +22,30 @@ class ProfileScreen extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final signedIn = ref.watch(isSignedInProvider);
 
-    return LargeTitleScaffold(
-      title: l10n.profileTitle,
-      actions: <Widget>[
-        IconButton(
-          tooltip: l10n.settingsTitle,
-          icon: const Icon(Icons.settings_outlined),
-          onPressed: () => context.push(AppRoutes.settings),
-        ),
-      ],
-      slivers: <Widget>[
-        signedIn
-            ? _SignedInBody(l10n: l10n)
-            : SliverFillRemaining(
-                hasScrollBody: false,
-                child: _SignedOutBody(l10n: l10n),
-              ),
-      ],
+    // Standard toolbar row: "Profile" top-left, settings gear top-right on
+    // the same line (the large-title layout left the text visually lowered).
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.profileTitle),
+        actions: glassActions(<Widget>[
+          GlassIconButton(
+            sfSymbol: 'gearshape',
+            fallbackIcon: Icons.settings_outlined,
+            semanticLabel: l10n.settingsTitle,
+            onPressed: () => context.push(AppRoutes.settings),
+          ),
+        ]),
+      ),
+      body: CustomScrollView(
+        slivers: <Widget>[
+          signedIn
+              ? _SignedInBody(l10n: l10n)
+              : SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _SignedOutBody(l10n: l10n),
+                ),
+        ],
+      ),
     );
   }
 }
@@ -56,8 +64,8 @@ class _SignedOutBody extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(Icons.account_circle_outlined,
-                size: 72, color: theme.colorScheme.primary),
+            Icon(CupertinoIcons.person_crop_circle,
+                size: 64, color: theme.colorScheme.primary),
             const SizedBox(height: 16),
             Text(l10n.profileSignedOutTitle, style: theme.textTheme.titleLarge),
             const SizedBox(height: 8),
@@ -70,7 +78,7 @@ class _SignedOutBody extends StatelessWidget {
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: () => context.push(AppRoutes.auth),
-              icon: const Icon(Icons.login),
+              icon: const Icon(CupertinoIcons.person_crop_circle_badge_checkmark),
               label: Text(l10n.profileSignInCta),
             ),
           ],
@@ -90,7 +98,7 @@ class _SignedInBody extends ConsumerWidget {
     WidgetRef ref,
     String current,
   ) async {
-    final newName = await showDialog<String>(
+    final newName = await showCupertinoDialog<String>(
       context: context,
       builder: (ctx) => _EditNameDialog(l10n: l10n, initialName: current),
     );
@@ -130,7 +138,7 @@ class _SignedInBody extends ConsumerWidget {
             children: <Widget>[
               const CircleAvatar(
                 radius: 28,
-                child: Icon(Icons.person, size: 32),
+                child: Icon(CupertinoIcons.person_fill, size: 30),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -150,7 +158,7 @@ class _SignedInBody extends ConsumerWidget {
               ),
               IconButton(
                 tooltip: l10n.profileEditName,
-                icon: const Icon(Icons.edit_outlined),
+                icon: const Icon(CupertinoIcons.pencil),
                 onPressed: () =>
                     _editName(context, ref, profile?.displayName ?? ''),
               ),
@@ -189,16 +197,20 @@ class _SignedInBody extends ConsumerWidget {
           _SyncSection(l10n: l10n),
           const SizedBox(height: 8),
           ListTile(
-            leading: const Icon(Icons.settings_outlined),
+            leading: const Icon(CupertinoIcons.gear),
             title: Text(l10n.settingsTitle),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: const Icon(CupertinoIcons.chevron_forward, size: 18),
             onTap: () => context.push(AppRoutes.settings),
           ),
           const SizedBox(height: 8),
-          OutlinedButton.icon(
+          // iOS convention: sign-out as a destructive-red plain row/button
+          // rather than an outlined Material button.
+          TextButton(
             onPressed: () => ref.read(authRepositoryProvider).signOut(),
-            icon: const Icon(Icons.logout),
-            label: Text(l10n.profileSignOut),
+            style: TextButton.styleFrom(
+              foregroundColor: theme.colorScheme.error,
+            ),
+            child: Text(l10n.profileSignOut),
           ),
         ],
       ),
@@ -231,19 +243,24 @@ class _EditNameDialogState extends State<_EditNameDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = widget.l10n;
-    return AlertDialog(
+    // Native iOS alert with an inline text field (UIAlertController style).
+    return CupertinoAlertDialog(
       title: Text(l10n.profileEditName),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        decoration: InputDecoration(hintText: l10n.profileDisplayNameHint),
+      content: Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: CupertinoTextField(
+          controller: _controller,
+          autofocus: true,
+          placeholder: l10n.profileDisplayNameHint,
+        ),
       ),
       actions: <Widget>[
-        TextButton(
+        CupertinoDialogAction(
           onPressed: () => Navigator.pop(context),
           child: Text(l10n.profileCancel),
         ),
-        FilledButton(
+        CupertinoDialogAction(
+          isDefaultAction: true,
           onPressed: () => Navigator.pop(context, _controller.text.trim()),
           child: Text(l10n.profileSave),
         ),
@@ -280,7 +297,7 @@ class _SyncSection extends ConsumerWidget {
       return Card(
         margin: EdgeInsets.zero,
         child: ListTile(
-          leading: const Icon(Icons.cloud_off_outlined),
+          leading: const Icon(CupertinoIcons.cloud),
           title: Text(l10n.syncSectionTitle),
           subtitle: Text(l10n.syncBackendNotConfigured),
         ),
@@ -294,15 +311,11 @@ class _SyncSection extends ConsumerWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: ListTile(
-        leading: const Icon(Icons.cloud_sync_outlined),
+        leading: const Icon(CupertinoIcons.arrow_2_circlepath),
         title: Text(l10n.syncSectionTitle),
         subtitle: Text(_statusText(state, pending)),
         trailing: running
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
+            ? const CupertinoActivityIndicator(radius: 10)
             : TextButton(
                 onPressed: () =>
                     ref.read(syncControllerProvider.notifier).syncNow(),

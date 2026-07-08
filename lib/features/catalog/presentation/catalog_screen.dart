@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -56,15 +57,14 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       body: Column(
         children: <Widget>[
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: TextField(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            // Canonical iOS search field (rounded grey, inline magnifier,
+            // native clear affordance) instead of a Material outlined field.
+            child: CupertinoSearchTextField(
               onChanged: _onQueryChanged,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: l10n.catalogSearchHint,
-                prefixIcon: const Icon(Icons.search),
-                border: const OutlineInputBorder(),
-                isDense: true,
+              placeholder: l10n.catalogSearchHint,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),
@@ -86,7 +86,7 @@ class _CatalogBody extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     if (state.failure != null && state.books.isEmpty) {
       return _Message(
-        icon: Icons.cloud_off_outlined,
+        icon: CupertinoIcons.cloud,
         text: l10n.catalogUnavailable,
         action: TextButton(
           onPressed: () => ref.read(catalogListProvider.notifier).retry(),
@@ -95,11 +95,11 @@ class _CatalogBody extends ConsumerWidget {
       );
     }
     if (state.loading && state.books.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CupertinoActivityIndicator(radius: 14));
     }
     if (state.books.isEmpty) {
       return _Message(
-        icon: Icons.explore_outlined,
+        icon: CupertinoIcons.compass,
         text: state.query.trim().isEmpty
             ? l10n.catalogEmpty
             : l10n.searchNoResults,
@@ -112,7 +112,7 @@ class _CatalogBody extends ConsumerWidget {
         if (index == state.books.length) {
           return const Padding(
             padding: EdgeInsets.all(16),
-            child: Center(child: CircularProgressIndicator()),
+            child: Center(child: CupertinoActivityIndicator()),
           );
         }
         return _CatalogTile(book: state.books[index]);
@@ -129,7 +129,8 @@ class _CatalogTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: const Icon(Icons.menu_book_outlined),
+      leading: const Icon(CupertinoIcons.book),
+      trailing: const Icon(CupertinoIcons.chevron_forward, size: 18),
       title: Text(book.title, maxLines: 2, overflow: TextOverflow.ellipsis),
       subtitle: Text(
         book.authorDisplay.isEmpty

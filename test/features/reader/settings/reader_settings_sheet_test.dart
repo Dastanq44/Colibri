@@ -6,6 +6,7 @@ import 'package:colibri/features/reader/settings/application/reader_settings_pro
 import 'package:colibri/features/reader/settings/domain/reader_settings.dart';
 import 'package:colibri/features/reader/settings/presentation/reader_settings_sheet.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -66,7 +67,7 @@ void main() {
     await settle(tester);
 
     expect(find.byType(ReaderSettingsSheet), findsOneWidget);
-    expect(find.byIcon(Icons.close), findsOneWidget);
+    expect(find.byIcon(CupertinoIcons.xmark), findsOneWidget);
   });
 
   testWidgets('the close button dismisses the sheet', (tester) async {
@@ -75,7 +76,7 @@ void main() {
     await settle(tester);
     expect(find.byType(ReaderSettingsSheet), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.close));
+    await tester.tap(find.byIcon(CupertinoIcons.xmark));
     await settle(tester);
 
     expect(find.byType(ReaderSettingsSheet), findsNothing);

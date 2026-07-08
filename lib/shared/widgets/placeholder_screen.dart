@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../app/widgets/glass_buttons.dart';
+
 /// A reusable, minimal placeholder scaffold used by foundation screens that do
 /// not have real feature logic yet. Keeps each feature screen tiny while still
 /// rendering a localized title and an optional subtitle/extra content.
@@ -23,7 +25,11 @@ class PlaceholderScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+        leading:
+            Navigator.canPop(context) ? const GlassBackButton() : null,
+        title: Text(title),
+      ),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),

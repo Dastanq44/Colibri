@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
@@ -59,16 +60,14 @@ class _SearchSheetState extends State<SearchSheet> {
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: TextField(
+              // iOS-native rounded search field with inline magnifier/clear.
+              child: CupertinoSearchTextField(
                 controller: _controller,
                 autofocus: true,
                 onChanged: _onQueryChanged,
-                textInputAction: TextInputAction.search,
-                decoration: InputDecoration(
-                  hintText: l10n.searchInBookHint,
-                  prefixIcon: const Icon(Icons.search),
-                  border: const OutlineInputBorder(),
-                  isDense: true,
+                placeholder: l10n.searchInBookHint,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
             ),

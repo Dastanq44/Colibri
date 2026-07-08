@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import 'app_text_styles.dart';
 
-/// Centralized app (chrome) theme — a warm-paper, Apple-styled look: an
-/// off-white "paper" scale with a single terracotta accent, iOS-scale
-/// typography, roomy grouped surfaces and soft rounded corners. Reader surface
-/// themes live in `reader_theme.dart`.
+/// Centralized app (chrome) theme — a neutral, native-iOS look: system
+/// grouped-grey backgrounds, white cards, a single system-blue accent,
+/// iOS-scale typography and soft rounded corners. Reader surface themes live
+/// in `reader_theme.dart` and stay user-customizable.
 abstract final class AppTheme {
   const AppTheme._();
 
@@ -20,13 +20,13 @@ abstract final class AppTheme {
     final colorScheme = ColorScheme(
       brightness: brightness,
       primary: isDark ? AppColors.accentDark : AppColors.accent,
-      onPrimary: isDark ? const Color(0xFF231202) : Colors.white,
+      onPrimary: Colors.white,
       primaryContainer:
-          isDark ? const Color(0xFF3A2413) : const Color(0xFFF3E1D1),
+          isDark ? const Color(0xFF0E2D4D) : const Color(0xFFDCEBFC),
       onPrimaryContainer:
-          isDark ? const Color(0xFFF3E1D1) : const Color(0xFF5A3416),
+          isDark ? const Color(0xFFBBD9F7) : const Color(0xFF0B3D66),
       secondary: isDark ? AppColors.accentDark : AppColors.accent,
-      onSecondary: isDark ? const Color(0xFF231202) : Colors.white,
+      onSecondary: Colors.white,
       surface: isDark ? AppColors.darkSurface : AppColors.lightSurface,
       onSurface: isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface,
       onSurfaceVariant:
@@ -34,13 +34,13 @@ abstract final class AppTheme {
       surfaceContainerHighest:
           isDark ? AppColors.darkSurfaceContainer : AppColors.lightSurfaceContainer,
       surfaceContainerHigh:
-          isDark ? const Color(0xFF262117) : const Color(0xFFF2ECDF),
+          isDark ? const Color(0xFF242426) : const Color(0xFFECECF0),
       surfaceContainer:
           isDark ? AppColors.darkSurfaceContainer : AppColors.lightSurfaceContainer,
       outline: isDark ? AppColors.darkOutline : AppColors.lightOutline,
       outlineVariant:
           isDark ? AppColors.darkOutlineVariant : AppColors.lightOutlineVariant,
-      error: const Color(0xFFD5432F),
+      error: const Color(0xFFFF3B30), // iOS system red
       onError: Colors.white,
     );
 
@@ -158,14 +158,11 @@ abstract final class AppTheme {
             ?.copyWith(color: colorScheme.onSurface),
       ),
       switchTheme: SwitchThemeData(
-        thumbColor: WidgetStateProperty.resolveWith(
-          (s) => s.contains(WidgetState.selected)
-              ? Colors.white
-              : (isDark ? const Color(0xFF8C8374) : Colors.white),
-        ),
+        // iOS switch: white thumb always; green track when on.
+        thumbColor: WidgetStateProperty.all(Colors.white),
         trackColor: WidgetStateProperty.resolveWith(
           (s) => s.contains(WidgetState.selected)
-              ? colorScheme.primary
+              ? const Color(0xFF34C759) // iOS system green
               : colorScheme.surfaceContainerHighest,
         ),
         trackOutlineColor: WidgetStateProperty.all(Colors.transparent),

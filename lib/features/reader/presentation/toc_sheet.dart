@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
@@ -37,7 +38,7 @@ class TocSheet extends StatelessWidget {
                 itemBuilder: (context, i) {
                   final entry = toc[i];
                   return ListTile(
-                    leading: const Icon(Icons.bookmark_border),
+                    leading: const Icon(CupertinoIcons.bookmark),
                     title: Text(entry.title, maxLines: 2, overflow: TextOverflow.ellipsis),
                     onTap: () {
                       Navigator.pop(context);

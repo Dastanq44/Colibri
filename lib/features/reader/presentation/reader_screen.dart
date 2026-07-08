@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:animations/animations.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart' show LongPressGestureRecognizer;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -332,32 +333,32 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             ListTile(
-              leading: const Icon(Icons.list_alt_outlined),
+              leading: const Icon(CupertinoIcons.list_bullet),
               title: Text(l10n.tableOfContents),
               onTap: () => Navigator.pop(ctx, 'toc'),
             ),
             ListTile(
-              leading: const Icon(Icons.search),
+              leading: const Icon(CupertinoIcons.search),
               title: Text(l10n.readerSearchInBook),
               onTap: () => Navigator.pop(ctx, 'search'),
             ),
             ListTile(
-              leading: const Icon(Icons.bookmark_add_outlined),
+              leading: const Icon(CupertinoIcons.bookmark),
               title: Text(l10n.readerAddBookmark),
               onTap: () => Navigator.pop(ctx, 'add_bookmark'),
             ),
             ListTile(
-              leading: const Icon(Icons.note_add_outlined),
+              leading: const Icon(CupertinoIcons.square_pencil),
               title: Text(l10n.readerAddNote),
               onTap: () => Navigator.pop(ctx, 'add_note'),
             ),
             ListTile(
-              leading: const Icon(Icons.bookmarks_outlined),
+              leading: const Icon(CupertinoIcons.bookmark_fill),
               title: Text(l10n.readerAnnotations),
               onTap: () => Navigator.pop(ctx, 'annotations'),
             ),
             ListTile(
-              leading: const Icon(Icons.settings_outlined),
+              leading: const Icon(CupertinoIcons.gear),
               title: Text(l10n.readerSettingsTitle),
               onTap: () => Navigator.pop(ctx, 'settings'),
             ),
@@ -469,20 +470,21 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     }
 
     final l10n = AppLocalizations.of(context);
-    final useCloud = await showDialog<bool>(
+    final useCloud = await showCupertinoDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => CupertinoAlertDialog(
         title: Text(l10n.syncConflictTitle),
         content: Text(l10n.syncConflictBody(
           local.progress.percent.round(),
           remote.percent.round(),
         )),
         actions: <Widget>[
-          TextButton(
+          CupertinoDialogAction(
             onPressed: () => Navigator.pop(ctx, false),
             child: Text(l10n.syncConflictKeepLocal),
           ),
-          FilledButton(
+          CupertinoDialogAction(
+            isDefaultAction: true,
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(l10n.syncConflictUseCloud),
           ),
@@ -557,7 +559,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     bool multiline = false,
     bool requireText = false,
   }) {
-    return showDialog<String>(
+    return showCupertinoDialog<String>(
       context: context,
       builder: (_) => _TextPromptDialog(
         title: title,
@@ -613,22 +615,22 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     return switch (state) {
       ReaderLoading() => _Scaffold(
           title: l10n.readerTitle,
-          child: const Center(child: CircularProgressIndicator()),
+          child: const Center(child: CupertinoActivityIndicator(radius: 14)),
         ),
       ReaderEmpty() => _Scaffold(
           title: l10n.readerTitle,
-          child: _Message(icon: Icons.menu_book_outlined, text: l10n.readerEmpty),
+          child: _Message(icon: CupertinoIcons.book, text: l10n.readerEmpty),
         ),
       ReaderUnsupported(:final reason) => _Scaffold(
           title: l10n.readerUnsupportedTitle,
           child: _Message(
-            icon: Icons.block_outlined,
+            icon: CupertinoIcons.nosign,
             text: _unsupportedText(l10n, reason),
           ),
         ),
       ReaderFailed() => _Scaffold(
           title: l10n.readerTitle,
-          child: _Message(icon: Icons.error_outline, text: l10n.readerOpenError),
+          child: _Message(icon: CupertinoIcons.exclamationmark_circle, text: l10n.readerOpenError),
         ),
       ReaderPdfReady(:final source) => PdfReaderView(source: source),
       ReaderReady() => _effectiveMode == ReaderMode.fast
@@ -722,24 +724,29 @@ class _TextPromptDialogState extends State<_TextPromptDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return AlertDialog(
+    // Native iOS alert with an inline text field (UIAlertController style).
+    return CupertinoAlertDialog(
       title: Text(widget.title),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        maxLines: widget.multiline ? 4 : 1,
-        textInputAction:
-            widget.multiline ? TextInputAction.newline : TextInputAction.done,
-        onChanged: widget.requireText ? (_) => setState(() {}) : null,
-        onSubmitted: widget.multiline ? null : (_) => _submit(),
-        decoration: InputDecoration(hintText: widget.hint),
+      content: Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: CupertinoTextField(
+          controller: _controller,
+          autofocus: true,
+          maxLines: widget.multiline ? 4 : 1,
+          textInputAction:
+              widget.multiline ? TextInputAction.newline : TextInputAction.done,
+          onChanged: widget.requireText ? (_) => setState(() {}) : null,
+          onSubmitted: widget.multiline ? null : (_) => _submit(),
+          placeholder: widget.hint,
+        ),
       ),
       actions: <Widget>[
-        TextButton(
+        CupertinoDialogAction(
           onPressed: () => Navigator.pop(context),
           child: Text(l10n.dialogCancel),
         ),
-        FilledButton(
+        CupertinoDialogAction(
+          isDefaultAction: true,
           onPressed: _submittable ? _submit : null,
           child: Text(l10n.dialogAdd),
         ),

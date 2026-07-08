@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,7 +43,7 @@ class ReaderSettingsSheet extends ConsumerWidget {
                 ),
                 IconButton(
                   tooltip: l10n.dialogClose,
-                  icon: const Icon(Icons.close),
+                  icon: const Icon(CupertinoIcons.xmark),
                   onPressed: () => Navigator.of(context).maybePop(),
                 ),
               ],
@@ -242,7 +243,7 @@ class _StepperRow extends StatelessWidget {
           Expanded(child: Text(label)),
           IconButton(
             tooltip: l10n.settingsDecrease,
-            icon: const Icon(Icons.remove_circle_outline),
+            icon: const Icon(CupertinoIcons.minus_circle),
             onPressed: onDecrease,
           ),
           SizedBox(
@@ -251,7 +252,7 @@ class _StepperRow extends StatelessWidget {
           ),
           IconButton(
             tooltip: l10n.settingsIncrease,
-            icon: const Icon(Icons.add_circle_outline),
+            icon: const Icon(CupertinoIcons.plus_circle),
             onPressed: onIncrease,
           ),
         ],

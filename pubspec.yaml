@@ -54,6 +54,7 @@ dependencies:
   animations: ^2.2.0
   liquid_glass_renderer: ^0.2.0-dev.4
   cupertino_native: ^0.1.1
+  cupertino_icons: ^1.0.9
 
   # Analytics SDK (Firebase Analytics or Amplitude) is added in Phase 15.
   # The AnalyticsRepository interface + a no-op default already exist so call

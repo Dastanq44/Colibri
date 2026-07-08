@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -47,17 +48,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final l10n = AppLocalizations.of(context);
     final pages = <_OnboardingPage>[
       _OnboardingPage(
-        icon: Icons.screen_rotation_outlined,
+        icon: CupertinoIcons.rotate_right,
         title: l10n.onboardingPage1Title,
         body: l10n.onboardingPage1Body,
       ),
       _OnboardingPage(
-        icon: Icons.speed_outlined,
+        icon: CupertinoIcons.speedometer,
         title: l10n.onboardingPage2Title,
         body: l10n.onboardingPage2Body,
       ),
       _OnboardingPage(
-        icon: Icons.lock_outline,
+        icon: CupertinoIcons.lock,
         title: l10n.onboardingPage3Title,
         body: l10n.onboardingPage3Body,
       ),

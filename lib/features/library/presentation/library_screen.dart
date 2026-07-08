@@ -1,9 +1,12 @@
+import 'package:cupertino_native/cupertino_native.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
+import '../../../app/widgets/glass_buttons.dart';
 import '../../../shared/models/bookshelf_status.dart';
 import '../application/library_providers.dart';
 import '../domain/library_book.dart';
@@ -23,8 +26,9 @@ String statusLabel(AppLocalizations l10n, BookShelfStatus status) =>
       BookShelfStatus.wantToRead => l10n.statusWantToRead,
     };
 
-/// "My Books" — local library backed by Drift. Shows imported books grouped by
-/// status, with an import action and per-book status/remove actions.
+/// "My Books" — local library backed by Drift. Shows imported books filtered
+/// by status (native iOS segmented control), with an import action and
+/// per-book status/remove actions via a native pull-down menu.
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
 
@@ -38,16 +42,17 @@ class LibraryScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.libraryTitle),
-        actions: <Widget>[
-          IconButton(
-            tooltip: l10n.importTitle,
-            icon: const Icon(Icons.add),
+        actions: glassActions(<Widget>[
+          GlassIconButton(
+            sfSymbol: 'plus',
+            fallbackIcon: Icons.add,
+            semanticLabel: l10n.importTitle,
             onPressed: () => context.push(AppRoutes.importBook),
           ),
-        ],
+        ]),
       ),
       body: booksAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: CupertinoActivityIndicator(radius: 14)),
         error: (_, __) => Center(child: Text(l10n.libraryLoadError)),
         data: (books) =>
             books.isEmpty ? _EmptyState(l10n: l10n) : _LibraryTabs(books: books),
@@ -70,8 +75,8 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(Icons.menu_book_outlined,
-                size: 72, color: theme.colorScheme.primary),
+            Icon(CupertinoIcons.book,
+                size: 64, color: theme.colorScheme.primary),
             const SizedBox(height: 16),
             Text(l10n.libraryEmptyTitle, style: theme.textTheme.titleLarge),
             const SizedBox(height: 8),
@@ -84,7 +89,7 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: () => context.push(AppRoutes.importBook),
-              icon: const Icon(Icons.file_upload_outlined),
+              icon: const Icon(CupertinoIcons.square_arrow_up),
               label: Text(l10n.importChooseFile),
             ),
           ],
@@ -94,37 +99,59 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-class _LibraryTabs extends StatelessWidget {
+/// Status filter as a native iOS segmented control (real `UISegmentedControl`
+/// via `cupertino_native`) driving a single list; Material `TabBar` reads as
+/// Android. Falls back to `CupertinoSlidingSegmentedControl` off-iOS.
+class _LibraryTabs extends StatefulWidget {
   const _LibraryTabs({required this.books});
 
   final List<LibraryBook> books;
 
   @override
+  State<_LibraryTabs> createState() => _LibraryTabsState();
+}
+
+class _LibraryTabsState extends State<_LibraryTabs> {
+  int _selected = 0;
+
+  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return DefaultTabController(
-      length: _statusTabs.length,
-      child: Column(
-        children: <Widget>[
-          TabBar(
-            isScrollable: true,
-            tabs: <Widget>[
-              for (final status in _statusTabs) Tab(text: statusLabel(l10n, status)),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
-              children: <Widget>[
-                for (final status in _statusTabs)
-                  _BookList(
-                    books:
-                        books.where((b) => b.status == status).toList(),
+    final labels = <String>[
+      for (final status in _statusTabs) statusLabel(l10n, status),
+    ];
+    final isIos = Theme.of(context).platform == TargetPlatform.iOS;
+    final status = _statusTabs[_selected];
+
+    return Column(
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: SizedBox(
+            width: double.infinity,
+            child: isIos
+                ? CNSegmentedControl(
+                    labels: labels,
+                    selectedIndex: _selected,
+                    onValueChanged: (i) => setState(() => _selected = i),
+                  )
+                : CupertinoSlidingSegmentedControl<int>(
+                    groupValue: _selected,
+                    children: <int, Widget>{
+                      for (var i = 0; i < labels.length; i++)
+                        i: Text(labels[i]),
+                    },
+                    onValueChanged: (i) =>
+                        setState(() => _selected = i ?? _selected),
                   ),
-              ],
-            ),
           ),
-        ],
-      ),
+        ),
+        Expanded(
+          child: _BookList(
+            books: widget.books.where((b) => b.status == status).toList(),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -175,17 +202,19 @@ class _BookCard extends ConsumerWidget {
   ) async {
     final repo = ref.read(libraryRepositoryProvider);
     if (action.isRemove) {
-      final confirmed = await showDialog<bool>(
+      // iOS-native confirmation: centered alert with a destructive action.
+      final confirmed = await showCupertinoDialog<bool>(
         context: context,
-        builder: (ctx) => AlertDialog(
+        builder: (ctx) => CupertinoAlertDialog(
           title: Text(l10n.removeBookTitle),
           content: Text(l10n.removeBookBody),
           actions: <Widget>[
-            TextButton(
+            CupertinoDialogAction(
               onPressed: () => Navigator.pop(ctx, false),
               child: Text(l10n.dialogCancel),
             ),
-            FilledButton(
+            CupertinoDialogAction(
+              isDestructiveAction: true,
               onPressed: () => Navigator.pop(ctx, true),
               child: Text(l10n.libraryRemove),
             ),
@@ -200,14 +229,64 @@ class _BookCard extends ConsumerWidget {
     }
   }
 
+  /// Menu entries in display order; index-aligned with [_actionAt].
+  List<_CardAction> get _actions => <_CardAction>[
+        for (final status in _statusTabs) _CardAction.status(status),
+        const _CardAction.remove(),
+      ];
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
+    final isIos = theme.platform == TargetPlatform.iOS;
     final author =
         book.authorDisplay.isEmpty ? l10n.libraryUnknownAuthor : book.authorDisplay;
+    final actions = _actions;
+
+    // Native iOS pull-down menu (UIMenu) instead of the Android-style
+    // Material dropdown; Material PopupMenuButton stays as the fallback.
+    final Widget menu = isIos
+        ? CNPopupMenuButton.icon(
+            buttonIcon: const CNSymbol('ellipsis', size: 16),
+            size: 34,
+            buttonStyle: CNButtonStyle.plain,
+            items: <CNPopupMenuEntry>[
+              for (final status in _statusTabs)
+                CNPopupMenuItem(label: statusLabel(l10n, status)),
+              const CNPopupMenuDivider(),
+              CNPopupMenuItem(
+                label: l10n.libraryRemove,
+                icon: const CNSymbol('trash'),
+              ),
+            ],
+            onSelected: (index) {
+              // Divider is not selectable; indexes map straight to actions
+              // (0..3 statuses, 4 remove).
+              final action =
+                  index < _statusTabs.length ? actions[index] : actions.last;
+              _onAction(context, ref, l10n, action);
+            },
+          )
+        : PopupMenuButton<_CardAction>(
+            tooltip: l10n.libraryChangeStatus,
+            onSelected: (action) => _onAction(context, ref, l10n, action),
+            itemBuilder: (context) => <PopupMenuEntry<_CardAction>>[
+              for (final status in _statusTabs)
+                PopupMenuItem<_CardAction>(
+                  value: _CardAction.status(status),
+                  child: Text(statusLabel(l10n, status)),
+                ),
+              const PopupMenuDivider(),
+              PopupMenuItem<_CardAction>(
+                value: const _CardAction.remove(),
+                child: Text(l10n.libraryRemove),
+              ),
+            ],
+          );
 
     return Card(
+      margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         leading: _FormatBadge(label: book.format.badge),
         title: Text(book.title, maxLines: 2, overflow: TextOverflow.ellipsis),
@@ -232,22 +311,7 @@ class _BookCard extends ConsumerWidget {
               ? AppRoutes.bookDetail(book.cloudBookId!)
               : AppRoutes.reader(book.id),
         ),
-        trailing: PopupMenuButton<_CardAction>(
-          tooltip: l10n.libraryChangeStatus,
-          onSelected: (action) => _onAction(context, ref, l10n, action),
-          itemBuilder: (context) => <PopupMenuEntry<_CardAction>>[
-            for (final status in _statusTabs)
-              PopupMenuItem<_CardAction>(
-                value: _CardAction.status(status),
-                child: Text(statusLabel(l10n, status)),
-              ),
-            const PopupMenuDivider(),
-            PopupMenuItem<_CardAction>(
-              value: const _CardAction.remove(),
-              child: Text(l10n.libraryRemove),
-            ),
-          ],
-        ),
+        trailing: menu,
       ),
     );
   }
@@ -273,18 +337,19 @@ class _FormatBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      width: 44,
+      height: 44,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: scheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(8),
+        color: scheme.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: scheme.onSecondaryContainer,
-        ),
+        style: Theme.of(context)
+            .textTheme
+            .labelSmall
+            ?.copyWith(color: scheme.primary, fontWeight: FontWeight.w700),
       ),
     );
   }
