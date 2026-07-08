@@ -176,7 +176,10 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
                     onScaleStart: (_) =>
                         _pinchBase = ref.read(fastWordScaleProvider).valueOrNull,
                     onScaleUpdate: (d) {
-                      if (d.pointerCount < 2) return;
+                      // Accept multi-touch pinch (pointerCount >= 2) and
+                      // trackpad pinch (reported as pointerCount 0); ignore a
+                      // single-finger drag (1) so it falls through to the taps.
+                      if (d.pointerCount == 1) return;
                       final base = _pinchBase ?? scale;
                       ref
                           .read(fastWordScaleProvider.notifier)
@@ -286,10 +289,18 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
   }
 }
 
-/// RSVP words: two dimmed context words per side and the current word in the
-/// centre. The current word's box is centred symmetrically (equal side cells)
-/// and all words share the same floor (bottom-aligned), so the smaller side
-/// words sit on the current word's baseline rather than its vertical middle.
+/// RSVP words: the current word centred, flanked by as many dimmed context
+/// words per side as fit inside an invisible border, all sharing the same floor
+/// (bottom-aligned).
+///
+/// Context words are laid out outward from the current word and measured, not
+/// capped at a fixed count. A word shows when at least half of it sits inside
+/// the border (midpoint rule); the first word that falls past it ends that
+/// side, so the closest words never get clipped. While **playing** the border
+/// is an inset band that keeps the eye near the centre; while **paused** the
+/// border is the screen edge, so context spans the whole width and a word that
+/// crosses the edge is still shown (clipped to the visible part). Because the
+/// fit is measured, larger pinch-zoom sizes simply show fewer words.
 class _WordRow extends StatelessWidget {
   const _WordRow({
     required this.state,
@@ -303,80 +314,106 @@ class _WordRow extends StatelessWidget {
   final ReaderFontFamily fontFamily;
   final double scale;
 
+  /// Fraction of the half-width the playing-mode border sits at (leaves a
+  /// margin so context words stay clear of the screen edges).
+  static const double _playingBandFactor = 0.84;
+  static const int _maxWordsPerSide = 8;
+
   @override
   Widget build(BuildContext context) {
-    final side = fontFamily.applyTo(TextStyle(
+    final textScaler = MediaQuery.textScalerOf(context);
+    final sideStyle = fontFamily.applyTo(TextStyle(
       fontSize: 26 * scale,
       color: palette.dim,
       height: 1.0,
     ));
-    final current = fontFamily.applyTo(TextStyle(
+    final currentStyle = fontFamily.applyTo(TextStyle(
       fontSize: 58 * scale,
       fontWeight: FontWeight.w600,
       color: palette.text,
       height: 1.0,
     ));
     final showAdjacent = state.settings.showAdjacentContext;
+    final playing = state.isPlaying;
 
-    Widget word(String? text, TextStyle style) => Text(
-          text ?? '',
-          style: style,
-          maxLines: 1,
-          softWrap: false,
-          overflow: TextOverflow.clip,
-        );
+    Size measure(String text, TextStyle style) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: style),
+        textDirection: TextDirection.ltr,
+        textScaler: textScaler,
+        maxLines: 1,
+      )..layout();
+      return painter.size;
+    }
 
     return LayoutBuilder(builder: (context, constraints) {
-      final gap = SizedBox(width: 16 * scale);
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end, // same floor
-            children: <Widget>[
-              // Left context, hugging toward the centre.
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: <Widget>[
-                    if (showAdjacent) ...<Widget>[
-                      Flexible(child: word(state.tokenAt(-2)?.rawText, side)),
-                      gap,
-                      Flexible(child: word(state.tokenAt(-1)?.rawText, side)),
-                      gap,
-                    ],
-                  ],
-                ),
-              ),
-              // Current word: bounded so FittedBox can shrink long words, and
-              // the inflexible middle child stays screen-centred.
-              ConstrainedBox(
-                constraints:
-                    BoxConstraints(maxWidth: constraints.maxWidth * 0.46),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: word(state.currentToken?.rawText, current),
-                ),
-              ),
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: <Widget>[
-                    if (showAdjacent) ...<Widget>[
-                      gap,
-                      Flexible(child: word(state.tokenAt(1)?.rawText, side)),
-                      gap,
-                      Flexible(child: word(state.tokenAt(2)?.rawText, side)),
-                    ],
-                  ],
-                ),
-              ),
-            ],
+      final maxW = constraints.maxWidth;
+      final maxH = constraints.maxHeight;
+      final centreX = maxW / 2;
+      final gap = 16 * scale;
+
+      // Current word: shrink to its 0.46-width box if it would overflow.
+      final currentText = state.currentToken?.rawText ?? '';
+      final rawCurrent =
+          currentText.isEmpty ? Size.zero : measure(currentText, currentStyle);
+      final centreMaxW = maxW * 0.46;
+      final fit = (rawCurrent.width > centreMaxW && rawCurrent.width > 0)
+          ? centreMaxW / rawCurrent.width
+          : 1.0;
+      final centreW = rawCurrent.width * fit;
+      final centreH = rawCurrent.height * fit;
+      final centreHalf = centreW / 2;
+
+      // The border, measured from the centre: an inset band while playing, the
+      // screen edge while paused.
+      final bandHalf = playing ? (maxW / 2) * _playingBandFactor : maxW / 2;
+
+      // Floor-align every word (shared bottom) with the row vertically centred.
+      final sideH = measure('Ag', sideStyle).height;
+      final rowH = centreH > sideH ? centreH : sideH;
+      final bottom = (maxH - rowH) / 2;
+
+      final children = <Widget>[];
+      if (currentText.isNotEmpty) {
+        children.add(Positioned(
+          left: centreX - centreHalf,
+          bottom: bottom,
+          width: centreW,
+          height: centreH,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(currentText,
+                style: currentStyle, maxLines: 1, softWrap: false),
           ),
-        ),
-      );
+        ));
+      }
+
+      if (showAdjacent && currentText.isNotEmpty) {
+        for (final dir in const <int>[-1, 1]) {
+          // Distance from the centre to this word's near (inner) edge.
+          var inner = centreHalf + gap;
+          for (var step = 1; step <= _maxWordsPerSide; step++) {
+            final text = state.tokenAt(dir * step)?.rawText;
+            if (text == null || text.isEmpty) break;
+            final w = measure(text, sideStyle).width;
+            if (w <= 0) break;
+            // Show when the word's midpoint is inside the border; the first
+            // one that isn't ends this side (outer words are further still).
+            if (inner + w / 2 > bandHalf) break;
+            children.add(Positioned(
+              left: dir < 0 ? centreX - inner - w : centreX + inner,
+              bottom: bottom,
+              child: Text(text,
+                  style: sideStyle, maxLines: 1, softWrap: false),
+            ));
+            inner += w + gap;
+          }
+        }
+      }
+
+      // Clip so paused words that cross the screen edge show only their
+      // on-screen part.
+      return ClipRect(child: Stack(children: children));
     });
   }
 }
@@ -483,51 +520,71 @@ class _FastBottomBar extends StatelessWidget {
       top: false,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        child: Row(
-          children: <Widget>[
-            IconButton(
-              tooltip: l10n.readerModeLock,
-              color: palette.text,
-              icon: Icon(modeLocked ? Icons.lock : Icons.lock_open_outlined),
-              onPressed: onToggleModeLock,
-            ),
-            // "Lock rotation" label to the right of the lock, only while
-            // paused (fades out when reading resumes).
-            AnimatedOpacity(
-              opacity: paused ? 1 : 0,
-              duration: duration,
-              child: Text(
-                l10n.fastLockRotationHint,
-                style: theme.textTheme.bodyMedium?.copyWith(color: palette.dim),
+        // Stack (not Row) so the speed/progress stays at the true screen
+        // centre regardless of the differently-sized clusters on each side —
+        // the "Lock rotation" label no longer shoves it off-centre.
+        child: SizedBox(
+          height: 56,
+          child: Stack(
+            children: <Widget>[
+              // Centred speed + progress.
+              Center(
+                child: Semantics(
+                  label:
+                      '${l10n.fastCurrentSpeedLabel}, ${l10n.readerProgressLabel}',
+                  value:
+                      '${state.wpm} ${l10n.wpm}, ${state.progressPercent.round()}%',
+                  excludeSemantics: true,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text('${state.wpm} ${l10n.wpm}',
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(color: palette.text)),
+                      Text('${state.progressPercent.round()}%',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: palette.dim)),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            Expanded(
-              child: Semantics(
-                label:
-                    '${l10n.fastCurrentSpeedLabel}, ${l10n.readerProgressLabel}',
-                value:
-                    '${state.wpm} ${l10n.wpm}, ${state.progressPercent.round()}%',
-                excludeSemantics: true,
-                child: Column(
+              // Left cluster: mode lock + the paused-only "Lock rotation" hint.
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    Text('${state.wpm} ${l10n.wpm}',
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(color: palette.text)),
-                    Text('${state.progressPercent.round()}%',
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: palette.dim)),
+                    IconButton(
+                      tooltip: l10n.readerModeLock,
+                      color: palette.text,
+                      icon: Icon(
+                          modeLocked ? Icons.lock : Icons.lock_open_outlined),
+                      onPressed: onToggleModeLock,
+                    ),
+                    AnimatedOpacity(
+                      opacity: paused ? 1 : 0,
+                      duration: duration,
+                      child: Text(
+                        l10n.fastLockRotationHint,
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(color: palette.dim),
+                      ),
+                    ),
                   ],
                 ),
               ),
-            ),
-            IconButton(
-              tooltip: state.isPlaying ? l10n.fastPause : l10n.fastPlay,
-              color: palette.text,
-              icon: Icon(state.isPlaying ? Icons.pause : Icons.play_arrow),
-              onPressed: onPlayPause,
-            ),
-          ],
+              // Right: play/pause.
+              Align(
+                alignment: Alignment.centerRight,
+                child: IconButton(
+                  tooltip: state.isPlaying ? l10n.fastPause : l10n.fastPlay,
+                  color: palette.text,
+                  icon: Icon(state.isPlaying ? Icons.pause : Icons.play_arrow),
+                  onPressed: onPlayPause,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
