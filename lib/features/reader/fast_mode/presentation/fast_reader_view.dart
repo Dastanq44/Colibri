@@ -12,13 +12,13 @@ import '../../../../data/repositories/analytics_repository.dart';
 import '../../settings/application/reader_settings_providers.dart';
 import '../application/fast_mode_engine.dart';
 import '../application/fast_mode_providers.dart';
+import '../application/fast_word_scale_provider.dart';
 import '../domain/fast_mode_playback_state.dart';
 import '../domain/fast_mode_state.dart';
 
-/// Landscape fast (RSVP) reader. Centered current word, optional dimmed
-/// neighbours, tap-left/center/right to slow/pause/speed up, with transient
-/// feedback. Honors persisted fast settings (WPM bounds, speed lock, adjacent
-/// context) and the reader theme palette.
+/// Landscape fast (RSVP) reader. Current word centred symmetrically with two
+/// dimmed context words per side (floor-aligned), tap-left/center/right to
+/// slow/pause/speed up, pinch to resize. Honors persisted fast settings.
 class FastReaderView extends ConsumerStatefulWidget {
   const FastReaderView({
     super.key,
@@ -41,6 +41,9 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
   FastModeEngine? _engine;
   FastModePlaybackState? _lastPlayback;
 
+  // Pinch-to-zoom on the word size.
+  double? _pinchBase;
+
   @override
   void dispose() {
     _feedbackTimer?.cancel();
@@ -48,17 +51,12 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
     super.dispose();
   }
 
-  /// Fires [feedback] only when the persisted haptics setting allows it
-  /// (TASK-1007). Fails closed (`?? false`): while settings are still loading
-  /// we must not vibrate against a persisted opt-out.
   void _haptic(Future<void> Function() feedback) {
     final enabled =
         ref.read(readerSettingsProvider).valueOrNull?.hapticsEnabled ?? false;
     if (enabled) unawaited(feedback());
   }
 
-  /// Watches for the playback reaching [FastModePlaybackState.completed] so
-  /// finishing the book gets a haptic (listener side-effect, not in build).
   void _onEngineChanged() {
     final playback = _engine?.state.playback;
     if (playback == FastModePlaybackState.completed &&
@@ -121,8 +119,6 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final engine = ref.watch(fastModeEngineProvider(widget.bookId));
-    // Idempotent listener swap: track the (possibly recreated) engine for the
-    // completion haptic without doing side effects on every rebuild.
     if (!identical(_engine, engine)) {
       _engine?.removeListener(_onEngineChanged);
       _engine = engine;
@@ -133,6 +129,7 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
     final theme = readerSettings?.theme ?? ReaderThemeVariant.light;
     final fontFamily = readerSettings?.fontFamily ?? ReaderFontFamily.system;
     final palette = ReaderPalette.of(theme);
+    final scale = ref.watch(fastWordScaleProvider).valueOrNull ?? 1.0;
 
     return ListenableBuilder(
       listenable: engine,
@@ -173,80 +170,101 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
             child: Column(
               children: <Widget>[
                 Expanded(
-                  child: Stack(
-                    children: <Widget>[
-                      Positioned.fill(
-                        child: Row(
-                          children: <Widget>[
-                            Expanded(
-                              child: Semantics(
-                                label: l10n.fastDecreaseSpeed,
-                                button: true,
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => _decrease(engine, l10n),
-                                  child: const SizedBox.expand(),
+                  // Pinch anywhere to resize the words; single taps fall
+                  // through to the zones below.
+                  child: GestureDetector(
+                    onScaleStart: (_) =>
+                        _pinchBase = ref.read(fastWordScaleProvider).valueOrNull,
+                    onScaleUpdate: (d) {
+                      if (d.pointerCount < 2) return;
+                      final base = _pinchBase ?? scale;
+                      ref
+                          .read(fastWordScaleProvider.notifier)
+                          .preview(base * d.scale);
+                    },
+                    onScaleEnd: (_) {
+                      if (_pinchBase != null) {
+                        _pinchBase = null;
+                        unawaited(
+                            ref.read(fastWordScaleProvider.notifier).commit());
+                      }
+                    },
+                    child: Stack(
+                      children: <Widget>[
+                        Positioned.fill(
+                          child: Row(
+                            children: <Widget>[
+                              Expanded(
+                                child: Semantics(
+                                  label: l10n.fastDecreaseSpeed,
+                                  button: true,
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () => _decrease(engine, l10n),
+                                    child: const SizedBox.expand(),
+                                  ),
                                 ),
                               ),
-                            ),
-                            Expanded(
-                              child: Semantics(
-                                label: s.isPlaying ? l10n.fastPause : l10n.fastPlay,
-                                button: true,
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => _toggle(engine, l10n),
-                                  child: const SizedBox.expand(),
+                              Expanded(
+                                child: Semantics(
+                                  label:
+                                      s.isPlaying ? l10n.fastPause : l10n.fastPlay,
+                                  button: true,
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () => _toggle(engine, l10n),
+                                    child: const SizedBox.expand(),
+                                  ),
                                 ),
                               ),
-                            ),
-                            Expanded(
-                              child: Semantics(
-                                label: l10n.fastIncreaseSpeed,
-                                button: true,
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => _increase(engine, l10n),
-                                  child: const SizedBox.expand(),
+                              Expanded(
+                                child: Semantics(
+                                  label: l10n.fastIncreaseSpeed,
+                                  button: true,
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () => _increase(engine, l10n),
+                                    child: const SizedBox.expand(),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: _WordRow(
-                            state: s,
-                            palette: palette,
-                            fontFamily: fontFamily,
+                            ],
                           ),
                         ),
-                      ),
-                      // Fading hints (visible while paused): what each tap
-                      // zone does, and the rotation-lock affordance.
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: _FastTapHints(
-                            paused: !s.isPlaying,
-                            step: s.settings.step,
-                            speedLocked: s.settings.speedLockEnabled,
-                            reduced: readerSettings?.reducedMotion ?? false,
-                            l10n: l10n,
-                            palette: palette,
-                          ),
-                        ),
-                      ),
-                      if (_feedback != null)
-                        Positioned(
-                          top: 24,
-                          left: 0,
-                          right: 0,
+                        Positioned.fill(
                           child: IgnorePointer(
-                            child: Center(child: _FeedbackChip(text: _feedback!)),
+                            child: _WordRow(
+                              state: s,
+                              palette: palette,
+                              fontFamily: fontFamily,
+                              scale: scale,
+                            ),
                           ),
                         ),
-                    ],
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: _WpmHints(
+                              paused: !s.isPlaying,
+                              step: s.settings.step,
+                              speedLocked: s.settings.speedLockEnabled,
+                              reduced: readerSettings?.reducedMotion ?? false,
+                              l10n: l10n,
+                              palette: palette,
+                            ),
+                          ),
+                        ),
+                        if (_feedback != null)
+                          Positioned(
+                            top: 24,
+                            left: 0,
+                            right: 0,
+                            child: IgnorePointer(
+                              child:
+                                  Center(child: _FeedbackChip(text: _feedback!)),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
                 _FastBottomBar(
@@ -254,6 +272,8 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
                   state: s,
                   palette: palette,
                   modeLocked: widget.modeLocked,
+                  paused: !s.isPlaying,
+                  reduced: readerSettings?.reducedMotion ?? false,
                   onToggleModeLock: widget.onToggleModeLock,
                   onPlayPause: () => _toggle(engine, l10n),
                 ),
@@ -266,90 +286,105 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
   }
 }
 
-/// RSVP words laid out horizontally: previous (dim) on the left, current
-/// (large) pinned to the centre, next (dim) on the right. The two side cells
-/// are equal-width so the current word's centre stays fixed as it changes.
+/// RSVP words: two dimmed context words per side and the current word in the
+/// centre. The current word's box is centred symmetrically (equal side cells)
+/// and all words share the same floor (bottom-aligned), so the smaller side
+/// words sit on the current word's baseline rather than its vertical middle.
 class _WordRow extends StatelessWidget {
   const _WordRow({
     required this.state,
     required this.palette,
     required this.fontFamily,
+    required this.scale,
   });
 
   final FastModeState state;
   final ReaderPalette palette;
   final ReaderFontFamily fontFamily;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
     final side = fontFamily.applyTo(TextStyle(
-      fontSize: 30,
+      fontSize: 26 * scale,
       color: palette.dim,
+      height: 1.0,
     ));
     final current = fontFamily.applyTo(TextStyle(
-      fontSize: 60,
+      fontSize: 58 * scale,
       fontWeight: FontWeight.w600,
       color: palette.text,
+      height: 1.0,
     ));
     final showAdjacent = state.settings.showAdjacentContext;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: <Widget>[
-            // Equal-width side cells keep the current word centred.
-            Expanded(
-              flex: 2,
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: showAdjacent
-                    ? Text(state.previousToken?.rawText ?? '',
-                        style: side,
-                        maxLines: 1,
-                        textAlign: TextAlign.right,
-                        overflow: TextOverflow.ellipsis)
-                    : const SizedBox.shrink(),
-              ),
-            ),
-            // Flexible (not the sole inflexible child) gives the current word a
-            // BOUNDED width, so FittedBox.scaleDown actually shrinks long words
-            // instead of overflowing off-centre.
-            Flexible(
-              flex: 3,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(state.currentToken?.rawText ?? '',
-                      style: current, maxLines: 1, softWrap: false),
+    Widget word(String? text, TextStyle style) => Text(
+          text ?? '',
+          style: style,
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.clip,
+        );
+
+    return LayoutBuilder(builder: (context, constraints) {
+      final gap = SizedBox(width: 16 * scale);
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end, // same floor
+            children: <Widget>[
+              // Left context, hugging toward the centre.
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: <Widget>[
+                    if (showAdjacent) ...<Widget>[
+                      Flexible(child: word(state.tokenAt(-2)?.rawText, side)),
+                      gap,
+                      Flexible(child: word(state.tokenAt(-1)?.rawText, side)),
+                      gap,
+                    ],
+                  ],
                 ),
               ),
-            ),
-            Expanded(
-              flex: 2,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: showAdjacent
-                    ? Text(state.nextToken?.rawText ?? '',
-                        style: side,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis)
-                    : const SizedBox.shrink(),
+              // Current word: bounded so FittedBox can shrink long words, and
+              // the inflexible middle child stays screen-centred.
+              ConstrainedBox(
+                constraints:
+                    BoxConstraints(maxWidth: constraints.maxWidth * 0.46),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: word(state.currentToken?.rawText, current),
+                ),
               ),
-            ),
-          ],
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: <Widget>[
+                    if (showAdjacent) ...<Widget>[
+                      gap,
+                      Flexible(child: word(state.tokenAt(1)?.rawText, side)),
+                      gap,
+                      Flexible(child: word(state.tokenAt(2)?.rawText, side)),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    });
   }
 }
 
-/// Gray tap-affordance hints shown while fast mode is paused (e.g. right after
-/// entering it), fading out once reading resumes.
-class _FastTapHints extends StatelessWidget {
-  const _FastTapHints({
+/// Gray tap hints for the ±WPM zones, shown while paused and faded out on
+/// resume. Sit a little below the top edge, no repeated +/- glyph, larger text.
+class _WpmHints extends StatelessWidget {
+  const _WpmHints({
     required this.paused,
     required this.step,
     required this.speedLocked,
@@ -367,60 +402,33 @@ class _FastTapHints extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (speedLocked) return const SizedBox.shrink();
     final duration =
         reduced ? Duration.zero : const Duration(milliseconds: 300);
-    final labelStyle = TextStyle(
+    final style = TextStyle(
       color: palette.dim,
-      fontSize: 15,
+      fontSize: 19,
       fontWeight: FontWeight.w500,
     );
     Widget fade(Widget child) =>
         AnimatedOpacity(opacity: paused ? 1 : 0, duration: duration, child: child);
 
-    // Hints sit in the corners so they never collide with the centred word
-    // row: slower on the left, faster on the right, rotation lock by the
-    // lock icon (bottom-left).
     return Padding(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Stack(
         children: <Widget>[
-          if (!speedLocked) ...<Widget>[
-            Align(
-              alignment: Alignment.topLeft,
-              child: fade(_hint(
-                  Icons.remove, '-$step ${l10n.wpm}', labelStyle, palette.dim)),
-            ),
-            Align(
-              alignment: Alignment.topRight,
-              child: fade(_hint(
-                  Icons.add, '+$step ${l10n.wpm}', labelStyle, palette.dim)),
-            ),
-          ],
           Align(
-            alignment: Alignment.bottomLeft,
-            child: fade(Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Icon(Icons.screen_lock_rotation, size: 16, color: palette.dim),
-                const SizedBox(width: 6),
-                Text(l10n.fastLockRotationHint, style: labelStyle),
-              ],
-            )),
+            alignment: const Alignment(-1, -0.55),
+            child: fade(Text('-$step ${l10n.wpm}', style: style)),
+          ),
+          Align(
+            alignment: const Alignment(1, -0.55),
+            child: fade(Text('+$step ${l10n.wpm}', style: style)),
           ),
         ],
       ),
     );
   }
-
-  Widget _hint(IconData icon, String text, TextStyle style, Color color) =>
-      Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 4),
-          Text(text, style: style),
-        ],
-      );
 }
 
 class _FeedbackChip extends StatelessWidget {
@@ -437,8 +445,6 @@ class _FeedbackChip extends StatelessWidget {
         color: scheme.inverseSurface,
         borderRadius: BorderRadius.circular(999),
       ),
-      // Live region: screen readers announce each transient flash ("+25 WPM",
-      // "Speed locked", "Paused") — the tap zones give no other feedback.
       child: Semantics(
         liveRegion: true,
         child: Text(text, style: TextStyle(color: scheme.onInverseSurface)),
@@ -453,6 +459,8 @@ class _FastBottomBar extends StatelessWidget {
     required this.state,
     required this.palette,
     required this.modeLocked,
+    required this.paused,
+    required this.reduced,
     required this.onToggleModeLock,
     required this.onPlayPause,
   });
@@ -461,12 +469,16 @@ class _FastBottomBar extends StatelessWidget {
   final FastModeState state;
   final ReaderPalette palette;
   final bool modeLocked;
+  final bool paused;
+  final bool reduced;
   final VoidCallback onToggleModeLock;
   final VoidCallback onPlayPause;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final duration =
+        reduced ? Duration.zero : const Duration(milliseconds: 300);
     return SafeArea(
       top: false,
       child: Padding(
@@ -478,6 +490,16 @@ class _FastBottomBar extends StatelessWidget {
               color: palette.text,
               icon: Icon(modeLocked ? Icons.lock : Icons.lock_open_outlined),
               onPressed: onToggleModeLock,
+            ),
+            // "Lock rotation" label to the right of the lock, only while
+            // paused (fades out when reading resumes).
+            AnimatedOpacity(
+              opacity: paused ? 1 : 0,
+              duration: duration,
+              child: Text(
+                l10n.fastLockRotationHint,
+                style: theme.textTheme.bodyMedium?.copyWith(color: palette.dim),
+              ),
             ),
             Expanded(
               child: Semantics(

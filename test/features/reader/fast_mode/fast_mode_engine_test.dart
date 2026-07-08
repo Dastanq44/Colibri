@@ -183,4 +183,25 @@ void main() {
     );
     expect(e.state.settings.showAdjacentContext, isFalse);
   });
+
+  group('FastModeState.tokenAt (context words)', () {
+    test('returns tokens around the current index, null out of range', () {
+      final engine = _engine()..loadTokens(_tokens(10), startIndex: 5);
+      final s = engine.state;
+      expect(s.tokenAt(0)?.rawText, 'w5');
+      expect(s.tokenAt(-1)?.rawText, 'w4');
+      expect(s.tokenAt(-2)?.rawText, 'w3');
+      expect(s.tokenAt(1)?.rawText, 'w6');
+      expect(s.tokenAt(2)?.rawText, 'w7');
+    });
+
+    test('clamps at the edges', () {
+      final engine = _engine()..loadTokens(_tokens(3), startIndex: 0);
+      final s = engine.state;
+      expect(s.tokenAt(-1), isNull);
+      expect(s.tokenAt(-2), isNull);
+      expect(s.tokenAt(2)?.rawText, 'w2');
+      expect(s.tokenAt(3), isNull);
+    });
+  });
 }
