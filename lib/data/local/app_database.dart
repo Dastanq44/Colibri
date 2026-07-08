@@ -58,7 +58,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -77,6 +77,14 @@ class AppDatabase extends _$AppDatabase {
               m,
               localReaderSettings,
               localReaderSettings.hapticsEnabled,
+            );
+          }
+          if (from < 4) {
+            // v4: fast-mode natural pauses (hold clause/sentence ends longer).
+            await _addColumnIfAbsent(
+              m,
+              localFastSettings,
+              localFastSettings.naturalPausesEnabled,
             );
           }
         },

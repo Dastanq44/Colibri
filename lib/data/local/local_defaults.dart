@@ -35,5 +35,6 @@ abstract final class FastDefaults {
   static const int maxWpm = AppConstants.maxWpm; // 700
   static const int wpmStep = AppConstants.wpmStep; // 25
   static const bool showAdjacentContext = true;
+  static const bool naturalPausesEnabled = true;
   static const String chunkMode = 'word';
 }

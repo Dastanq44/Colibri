@@ -178,6 +178,43 @@ void main() {
     });
   });
 
+  group('ReaderController resume highlight', () {
+    ReaderReady ready(ProviderContainer c) =>
+        c.read(readerControllerProvider('b')) as ReaderReady;
+
+    test('setResumeHighlight underlines the word and moves to its page',
+        () async {
+      final c = _container(null);
+      await _pumpReady(c, 'b');
+      final ctrl = c.read(readerControllerProvider('b').notifier);
+
+      final target = ready(c).pages.last.startOffset + 3;
+      ctrl.setResumeHighlight(target);
+
+      final after = ready(c);
+      expect(after.highlightOffset, target);
+      expect(target, greaterThanOrEqualTo(after.currentPage.startOffset));
+      expect(target, lessThan(after.currentPage.endOffset));
+    });
+
+    test('a page turn or jump clears the highlight', () async {
+      final c = _container(null);
+      await _pumpReady(c, 'b');
+      final ctrl = c.read(readerControllerProvider('b').notifier);
+
+      ctrl.setResumeHighlight(5);
+      expect(ready(c).highlightOffset, 5);
+
+      ctrl.nextPage();
+      expect(ready(c).highlightOffset, isNull);
+
+      ctrl.setResumeHighlight(5);
+      expect(ready(c).highlightOffset, 5);
+      ctrl.jumpToOffset(1 << 30);
+      expect(ready(c).highlightOffset, isNull);
+    });
+  });
+
   group('ReaderController TOC', () {
     ProviderContainer multiChapter() {
       final doc = ReaderDocument(

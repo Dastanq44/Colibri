@@ -134,6 +134,8 @@
   "settingsSpeedLock": "Блокировка скорости",
   "settingsDefaultWpm": "Скорость по умолчанию",
   "settingsShowAdjacent": "Показывать соседние слова",
+  "settingsNaturalPauses": "Естественные паузы",
+  "settingsNaturalPausesHint": "Задерживать слова чуть дольше на запятых, в конце предложений и абзацев.",
   "settingsDecrease": "Уменьшить",
   "settingsIncrease": "Увеличить",
   "tableOfContents": "Оглавление",

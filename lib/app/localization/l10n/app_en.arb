@@ -164,6 +164,8 @@
   "settingsSpeedLock": "Speed lock",
   "settingsDefaultWpm": "Default speed",
   "settingsShowAdjacent": "Show adjacent words",
+  "settingsNaturalPauses": "Natural pauses",
+  "settingsNaturalPausesHint": "Hold words a little longer at commas, sentence and paragraph ends.",
   "settingsDecrease": "Decrease",
   "settingsIncrease": "Increase",
   "tableOfContents": "Table of contents",

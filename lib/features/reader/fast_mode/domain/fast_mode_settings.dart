@@ -10,6 +10,7 @@ class FastModeSettings {
     required this.step,
     required this.showAdjacentContext,
     required this.speedLockEnabled,
+    required this.naturalPausesEnabled,
   });
 
   final int wpm;
@@ -19,6 +20,10 @@ class FastModeSettings {
   final bool showAdjacentContext;
   final bool speedLockEnabled;
 
+  /// When on, words ending a clause/sentence/paragraph linger a little longer
+  /// (see NaturalPause). Default on.
+  final bool naturalPausesEnabled;
+
   factory FastModeSettings.defaults() => const FastModeSettings(
         wpm: AppConstants.defaultWpm,
         minWpm: AppConstants.minWpm,
@@ -26,12 +31,14 @@ class FastModeSettings {
         step: AppConstants.wpmStep,
         showAdjacentContext: true,
         speedLockEnabled: false,
+        naturalPausesEnabled: true,
       );
 
   FastModeSettings copyWith({
     int? wpm,
     bool? showAdjacentContext,
     bool? speedLockEnabled,
+    bool? naturalPausesEnabled,
   }) {
     return FastModeSettings(
       wpm: wpm ?? this.wpm,
@@ -40,6 +47,7 @@ class FastModeSettings {
       step: step,
       showAdjacentContext: showAdjacentContext ?? this.showAdjacentContext,
       speedLockEnabled: speedLockEnabled ?? this.speedLockEnabled,
+      naturalPausesEnabled: naturalPausesEnabled ?? this.naturalPausesEnabled,
     );
   }
 }
