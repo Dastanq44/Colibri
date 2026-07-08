@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#12b0ad"/>
+      <stop offset="0.55" stop-color="#0d8f8a"/>
+      <stop offset="1" stop-color="#0a6f6b"/>
+    </linearGradient>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e6f6f4"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+
+  <!-- Whole scene, scaled up and centered to fill the icon. -->
+  <g transform="translate(-4 -18) translate(512 512) scale(1.16) translate(-512 -512)">
+    <!-- Open book, centered at the bottom. -->
+    <g>
+      <path d="M512 668 C 424 634 322 630 240 660 L 240 762 C 328 730 436 740 512 778 Z"
+            fill="url(#page)"/>
+      <path d="M512 668 C 600 634 702 630 784 660 L 784 762 C 696 730 588 740 512 778 Z"
+            fill="url(#page)"/>
+      <path d="M512 668 L 512 778" stroke="#b9e4df" stroke-width="6" fill="none"/>
+      <g stroke="#c9e9e5" stroke-width="8" stroke-linecap="round">
+        <path d="M300 680 L 466 690"/>
+        <path d="M300 714 L 466 724"/>
+        <path d="M558 690 L 724 680"/>
+        <path d="M558 724 L 724 714"/>
+      </g>
+    </g>
+
+    <!-- Hummingbird -->
+    <g fill="#ffffff" transform="translate(-34 0)">
+      <!-- beak: long, slim, dipping toward the gutter -->
+      <path d="M430 628 L 520 500 L 538 512 L 448 642 Z"/>
+      <!-- body + tail: teardrop tapering right into a slim forked tail -->
+      <path d="M520 508
+               C 500 476 506 440 540 424
+               C 588 402 648 414 676 452
+               C 700 484 760 476 812 462
+               C 786 486 748 500 724 500
+               C 764 512 806 520 852 512
+               C 812 548 742 556 690 540
+               C 640 556 560 552 528 520
+               C 522 516 518 512 520 508 Z"/>
+      <!-- head -->
+      <circle cx="548" cy="452" r="46"/>
+      <!-- raised wing: crescent sweeping up and back to the right -->
+      <path d="M582 462
+               C 612 372 690 320 742 322
+               C 726 392 676 452 624 484
+               C 612 476 598 468 582 462 Z"/>
+    </g>
+    <!-- eye -->
+    <circle cx="520" cy="446" r="12" fill="#0a6f6b"/>
+  </g>
+</svg>

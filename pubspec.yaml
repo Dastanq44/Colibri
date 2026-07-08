@@ -66,6 +66,19 @@ dev_dependencies:
   drift_dev: ^2.18.0
   build_runner: ^2.4.11
 
+  # App-icon generation from assets/icon/colibri_icon.png (TASK-1703).
+  # Regenerate after changing the icon: `dart run flutter_launcher_icons`.
+  flutter_launcher_icons: ^0.14.1
+
+# App icon: Colibri hummingbird over an open book on a teal gradient.
+# iOS only for now (Android target comes later); iOS marketing icons must
+# be opaque, so alpha is flattened onto the icon's own background.
+flutter_launcher_icons:
+  image_path: "assets/icon/colibri_icon.png"
+  ios: true
+  remove_alpha_ios: true
+  android: false
+
 flutter:
   uses-material-design: true
   # Enables `flutter gen-l10n` (configured in l10n.yaml).
