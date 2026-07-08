@@ -299,7 +299,9 @@ class _WordRow extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
+            // Equal-width side cells keep the current word centred.
             Expanded(
+              flex: 2,
               child: Align(
                 alignment: Alignment.centerRight,
                 child: showAdjacent
@@ -311,15 +313,22 @@ class _WordRow extends StatelessWidget {
                     : const SizedBox.shrink(),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(state.currentToken?.rawText ?? '',
-                    style: current, maxLines: 1),
+            // Flexible (not the sole inflexible child) gives the current word a
+            // BOUNDED width, so FittedBox.scaleDown actually shrinks long words
+            // instead of overflowing off-centre.
+            Flexible(
+              flex: 3,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(state.currentToken?.rawText ?? '',
+                      style: current, maxLines: 1, softWrap: false),
+                ),
               ),
             ),
             Expanded(
+              flex: 2,
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: showAdjacent

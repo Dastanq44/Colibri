@@ -128,18 +128,24 @@ void main() {
   });
 
   group('ReaderController resume + bounds', () {
-    test('resumes the saved page index', () async {
+    test('resumes the page containing the saved offset (not pageNumber)',
+        () async {
+      // Offset 3100 lands on page 2 of the char placeholder pagination
+      // (~1500 chars/page). pageNumber is deliberately WRONG (99) to prove
+      // resolution is offset-based, not pageNumber-based.
       final c = _container(const ReaderLocator(
         locatorType: 'txt_offset',
-        locatorValue: '0',
-        pageNumber: 2,
+        locatorValue: '3100',
+        pageNumber: 99,
         percent: 0,
       ));
       final ready = await _pumpReady(c, 'b');
-      expect(ready.pageIndex, 2);
+      expect(ready.currentPage.startOffset, lessThanOrEqualTo(3100));
+      expect(ready.currentPage.endOffset, greaterThan(3100));
+      expect(ready.pageIndex, greaterThan(0));
     });
 
-    test('an out-of-range saved page falls back to 0', () async {
+    test('an unparseable saved offset falls back to page 0', () async {
       final c = _container(const ReaderLocator(
         locatorType: 'txt_offset',
         locatorValue: 'not-a-number',

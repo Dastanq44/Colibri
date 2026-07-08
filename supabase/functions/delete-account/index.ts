@@ -33,51 +33,77 @@ Deno.serve(async (req: Request) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  // Best-effort: private book files are stored NESTED as
-  // <user id>/<book uuid>/<file>, and storage list() is per-folder — so
-  // walk one level of book folders and remove their files.
+  // Cleanup is best-effort but NOT silent: failures are collected and returned
+  // so the client (or a sweep job) knows some data may remain, rather than
+  // reporting a clean deletion that left files/rows behind.
+  const warnings: string[] = [];
+  const PAGE = 1000;
+
+  // Lists an entire storage folder, paging past the 1000-item limit.
+  async function listAll(
+    bucket: ReturnType<typeof admin.storage.from>,
+    prefix: string,
+  ): Promise<string[]> {
+    const names: string[] = [];
+    for (let offset = 0; ; offset += PAGE) {
+      const { data, error } = await bucket.list(prefix, {
+        limit: PAGE,
+        offset,
+      });
+      if (error) throw error;
+      const batch = data ?? [];
+      for (const item of batch) names.push(item.name);
+      if (batch.length < PAGE) break;
+    }
+    return names;
+  }
+
+  // Private book files are stored NESTED as <user>/<book uuid>/<file>.
   try {
     const bucket = admin.storage.from("book-files-private");
-    const { data: bookDirs } = await bucket.list(user.id, { limit: 1000 });
+    const dirs = await listAll(bucket, user.id);
     const paths: string[] = [];
-    for (const dir of bookDirs ?? []) {
-      const { data: files } = await bucket.list(`${user.id}/${dir.name}`, {
-        limit: 1000,
-      });
-      for (const f of files ?? []) {
-        paths.push(`${user.id}/${dir.name}/${f.name}`);
+    for (const dir of dirs) {
+      for (const name of await listAll(bucket, `${user.id}/${dir}`)) {
+        paths.push(`${user.id}/${dir}/${name}`);
       }
     }
-    if (paths.length > 0) await bucket.remove(paths);
-  } catch (_) {
-    // Row cleanup still proceeds; orphaned objects can be swept later.
+    for (let i = 0; i < paths.length; i += PAGE) {
+      const { error } = await bucket.remove(paths.slice(i, i + PAGE));
+      if (error) throw error;
+    }
+  } catch (e) {
+    warnings.push(`storage cleanup failed: ${e}`);
   }
 
   // Uploaded book METADATA rows don't cascade from auth.users (books has no
-  // user column) — delete them explicitly or titles of the user's uploads
-  // would outlive the account. Catalog rows are untouched.
+  // user column) — delete them explicitly via book_files.owner_id BEFORE the
+  // user is deleted (which cascade-drops book_files, the only owner link).
   try {
-    const { data: owned } = await admin
+    const { data: owned, error: selErr } = await admin
       .from("book_files")
       .select("book_id")
       .eq("owner_id", user.id);
+    if (selErr) throw selErr;
     const ids = (owned ?? []).map((r: { book_id: string }) => r.book_id);
     if (ids.length > 0) {
-      await admin
+      const { error: delErr } = await admin
         .from("books")
         .delete()
         .in("id", ids)
         .eq("source_type", "upload");
+      if (delErr) throw delErr;
     }
-  } catch (_) {
-    // Non-fatal: rows become orphaned metadata; sweep later.
+  } catch (e) {
+    warnings.push(`book metadata cleanup failed: ${e}`);
   }
 
+  // The account deletion itself must succeed (it cascades all user-owned rows).
   const { error } = await admin.auth.admin.deleteUser(user.id);
   if (error) {
     return json({ error: error.message }, 500);
   }
-  return json({ ok: true }, 200);
+  return json(warnings.length > 0 ? { ok: true, warnings } : { ok: true }, 200);
 });
 
 function json(body: unknown, status: number): Response {

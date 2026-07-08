@@ -17,13 +17,18 @@ class TextPaginationService {
   /// when laid out with [style] and [textScaler]. Greedy: packs as much as
   /// fits per page, then snaps the break back to a paragraph or word boundary
   /// so words are never cut. Offsets stay contiguous and cover all of [text].
+  /// Smallest page (chars) used as a floor when a single line is taller than
+  /// the area (tiny window + huge font): we'd rather slightly overflow (the
+  /// caller clips) than emit one page per character and hang the UI.
+  static const int _minCharsPerPage = 400;
+
   List<ReaderPage> paginateToFit(
     String text, {
     required double maxWidth,
     required double maxHeight,
     required TextStyle style,
     TextScaler textScaler = TextScaler.noScaling,
-    int maxCharsPerPage = 3000,
+    int maxCharsPerPage = 8000,
   }) {
     if (text.isEmpty || maxWidth <= 0 || maxHeight <= 0) {
       return const <ReaderPage>[];
@@ -45,11 +50,18 @@ class TextPaginationService {
     var start = 0;
 
     while (start < length) {
-      final hi = (start + maxCharsPerPage).clamp(start + 1, length);
+      final cap = (start + maxCharsPerPage).clamp(start + 1, length);
+      // Exponentially probe outward to bracket the fit boundary, so the
+      // binary search window matches how much actually fits (no fixed cap
+      // that under-fills big screens) while staying O(log) in page size.
+      var hi = (start + 256).clamp(start + 1, cap);
+      while (hi < cap && fits(start, hi)) {
+        hi = (start + (hi - start) * 2).clamp(start + 1, cap);
+      }
       // Largest end in (start, hi] whose laid-out height still fits.
       var lo = start + 1;
       var high = hi;
-      var best = start + 1; // guarantee forward progress
+      var best = -1;
       while (lo <= high) {
         final mid = lo + (high - lo) ~/ 2;
         if (fits(start, mid)) {
@@ -59,7 +71,11 @@ class TextPaginationService {
           high = mid - 1;
         }
       }
-      var end = best;
+      // Even one character overflows the height: fall back to a minimum chunk
+      // (clipped by the view) instead of one page per character.
+      var end = best > start
+          ? best
+          : (start + _minCharsPerPage).clamp(start + 1, length);
       if (end < length) {
         // Snap back to a paragraph (preferred) or word boundary in the second
         // half of the fitted window so we never cut a word.

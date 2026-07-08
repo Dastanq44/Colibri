@@ -56,6 +56,25 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   /// (true = forward/next, false = backward/previous).
   bool _pageForward = true;
 
+  /// Bumped only by an actual user page turn; the page transition keys on
+  /// this so jumps (search/TOC/handoff) and re-pagination swap instantly
+  /// instead of playing a spurious slide.
+  int _pageTurnId = 0;
+
+  /// Turns the page and arms the directional transition — only when a page
+  /// actually exists in that direction (so a tap at the end doesn't animate).
+  void _turnPage(ReaderReady state, {required bool forward}) {
+    final can = forward ? state.progress.hasNext : state.progress.hasPrevious;
+    if (can) {
+      setState(() {
+        _pageForward = forward;
+        _pageTurnId++;
+      });
+    }
+    final notifier = ref.read(readerControllerProvider(widget.bookId).notifier);
+    forward ? notifier.nextPage() : notifier.previousPage();
+  }
+
   // Reading-session tracking (plan §10.2): one session per continuous
   // stretch in a mode; mode switches roll the session over.
   String? _sessionId;
@@ -614,30 +633,26 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
               settings: settings,
               modeLocked: settings.modeLockEnabled,
               pageForward: _pageForward,
+              pageTurnId: _pageTurnId,
               onToggleModeLock: () => _toggleModeLock(settings.modeLockEnabled),
               onOpenMenu: () => _openReaderMenu(state),
-              onPrevious: () {
-                setState(() => _pageForward = false);
-                ref
-                    .read(readerControllerProvider(widget.bookId).notifier)
-                    .previousPage();
-              },
-              onNext: () {
-                setState(() => _pageForward = true);
-                ref
-                    .read(readerControllerProvider(widget.bookId).notifier)
-                    .nextPage();
-              },
-              onViewport: (maxWidth, maxHeight, style, scaler) {
-                ref
-                    .read(readerControllerProvider(widget.bookId).notifier)
-                    .applyViewport(
-                      maxWidth: maxWidth,
-                      maxHeight: maxHeight,
-                      style: style,
-                      textScaler: scaler,
-                    );
-              },
+              onPrevious: () => _turnPage(state, forward: false),
+              onNext: () => _turnPage(state, forward: true),
+              // Suppress re-pagination while a mode switch is pending: the
+              // landscape normal layout would be discarded when fast mode
+              // commits (~500ms), so paginating the whole book for it is waste.
+              onViewport: _pendingMode != null
+                  ? null
+                  : (maxWidth, maxHeight, style, scaler) {
+                      ref
+                          .read(readerControllerProvider(widget.bookId).notifier)
+                          .applyViewport(
+                            maxWidth: maxWidth,
+                            maxHeight: maxHeight,
+                            style: style,
+                            textScaler: scaler,
+                          );
+                    },
             ),
     };
   }
@@ -760,6 +775,7 @@ class _NormalReaderView extends StatelessWidget {
     required this.settings,
     required this.modeLocked,
     required this.pageForward,
+    required this.pageTurnId,
     required this.onToggleModeLock,
     required this.onOpenMenu,
     required this.onPrevious,
@@ -776,19 +792,21 @@ class _NormalReaderView extends StatelessWidget {
   final ReaderSettings settings;
   final bool modeLocked;
   final bool pageForward;
+  final int pageTurnId;
   final VoidCallback onToggleModeLock;
   final VoidCallback onOpenMenu;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
 
   /// Reports the measured text area + style so the controller can re-paginate
-  /// to fit (see [ReaderController.applyViewport]).
+  /// to fit (see [ReaderController.applyViewport]). Null while a mode switch
+  /// is pending, to skip paginating a soon-discarded layout.
   final void Function(
     double maxWidth,
     double maxHeight,
     TextStyle style,
     TextScaler scaler,
-  ) onViewport;
+  )? onViewport;
 
   @override
   Widget build(BuildContext context) {
@@ -813,12 +831,17 @@ class _NormalReaderView extends StatelessWidget {
               builder: (context, constraints) {
                 // Re-paginate to fill this exact area (after the frame, so we
                 // never mutate state mid-build). No-op when nothing changed.
-                final scaler = MediaQuery.textScalerOf(context);
-                final maxWidth = constraints.maxWidth - _pagePadding.horizontal;
-                final maxHeight = constraints.maxHeight - _pagePadding.vertical;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  onViewport(maxWidth, maxHeight, textStyle, scaler);
-                });
+                final report = onViewport;
+                if (report != null) {
+                  final scaler = MediaQuery.textScalerOf(context);
+                  final maxWidth =
+                      constraints.maxWidth - _pagePadding.horizontal;
+                  final maxHeight =
+                      constraints.maxHeight - _pagePadding.vertical;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    report(maxWidth, maxHeight, textStyle, scaler);
+                  });
+                }
 
                 return Semantics(
                   customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
@@ -850,7 +873,10 @@ class _NormalReaderView extends StatelessWidget {
                         child: child,
                       ),
                       child: KeyedSubtree(
-                        key: ValueKey<int>(state.pageIndex),
+                        // Key on the user-turn id, not pageIndex: jumps and
+                        // re-pagination update content in place (no animation);
+                        // only a real turn changes the key and slides.
+                        key: ValueKey<int>(pageTurnId),
                         // Fitted page fills the area without scrolling; ClipRect
                         // guards the one transient frame before the first fit.
                         child: ClipRect(

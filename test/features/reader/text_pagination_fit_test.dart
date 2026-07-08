@@ -79,4 +79,36 @@ void main() {
     expect(service.paginateToFit('',
         maxWidth: 100, maxHeight: 100, style: style), isEmpty);
   });
+
+  testWidgets('a viewport too short for one line does NOT emit 1-char pages',
+      (tester) async {
+    // maxHeight smaller than a single 20px line: each page must still hold a
+    // usable chunk (min-chars floor), not one character each.
+    final text = List<String>.generate(200, (i) => 'word$i').join(' ');
+    final pages = service.paginateToFit(
+      text,
+      maxWidth: 300,
+      maxHeight: 12, // shorter than the line box
+      style: style,
+    );
+    expect(pages, isNotEmpty);
+    // Far fewer pages than characters (would be ~text.length if 1-char pages).
+    expect(pages.length, lessThan(text.length ~/ 50));
+    expect(pages.map((p) => p.text).join(), text);
+  });
+
+  testWidgets('large area / small font packs more than the old 3000 cap',
+      (tester) async {
+    const tiny = TextStyle(fontSize: 8, height: 1.2);
+    final text = List<String>.generate(4000, (i) => 'w$i').join(' ');
+    final pages = service.paginateToFit(
+      text,
+      maxWidth: 1200,
+      maxHeight: 2000, // huge area
+      style: tiny,
+    );
+    // At least one page holds well over 3000 characters (no artificial cap).
+    expect(pages.map((p) => p.text.length).reduce((a, b) => a > b ? a : b),
+        greaterThan(3000));
+  });
 }

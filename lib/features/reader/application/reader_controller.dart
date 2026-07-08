@@ -156,8 +156,10 @@ class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
   }
 
   int _resolveIndex(List<ReaderPage> pages, ReaderLocator locator) {
-    final byPage = locator.pageNumber;
-    if (byPage != null && byPage >= 0 && byPage < pages.length) return byPage;
+    // Resolve by character offset only. A saved `pageNumber` is an index into
+    // whatever pagination was active when it was saved (fit pages of a given
+    // size); reused against a different pagination it points at the wrong
+    // page, so it is not trusted here.
     final offset = int.tryParse(locator.locatorValue) ?? 0;
     final idx = pages.indexWhere(
       (p) => offset >= p.startOffset && offset < p.endOffset,
@@ -168,6 +170,7 @@ class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
   void nextPage() {
     final s = state;
     if (s is! ReaderReady || !s.progress.hasNext) return;
+    _pendingAnchorOffset = null; // an explicit turn supersedes a resume anchor
     state = s.copyWith(pageIndex: s.pageIndex + 1);
     _persist();
   }
@@ -175,6 +178,7 @@ class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
   void previousPage() {
     final s = state;
     if (s is! ReaderReady || !s.progress.hasPrevious) return;
+    _pendingAnchorOffset = null;
     state = s.copyWith(pageIndex: s.pageIndex - 1);
     _persist();
   }
@@ -189,10 +193,13 @@ class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
   }
 
   /// Jumps to the page containing [offset] (used to resume the normal reader
-  /// from a fast-mode position).
+  /// from a fast-mode position, or from search/TOC).
   void jumpToOffset(int offset) {
     final s = state;
     if (s is! ReaderReady) return;
+    // A jump (fast-mode handoff, search, TOC) is the authoritative position;
+    // drop any pending resume anchor so a later re-pagination can't rewind.
+    _pendingAnchorOffset = null;
     var index = s.pages.indexWhere(
       (p) => offset >= p.startOffset && offset < p.endOffset,
     );
@@ -209,13 +216,20 @@ class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
   String? _viewportKey;
 
   /// Exact reading offset to anchor the first fit-pagination on (from a
-  /// resumed locator); consumed on the first [applyViewport].
+  /// resumed locator); consumed on the first [applyViewport] or when the user
+  /// navigates, and used by [_persist] so the exact offset survives an early
+  /// exit (before the first re-pagination).
   int? _pendingAnchorOffset;
+
+  /// Small cache of already-computed paginations keyed by (size, style), so
+  /// rotating back / toggling a setting and back is instant rather than
+  /// re-running whole-book layout. Bounded to a few recent layouts.
+  final Map<String, List<ReaderPage>> _paginationCache =
+      <String, List<ReaderPage>>{};
 
   /// Re-paginates so each page fills the given text area without overflow
   /// (called by the reader view with its measured size + current font style).
-  /// Idempotent per (size, style) — a no-op when nothing changed. Keeps the
-  /// reading position by re-anchoring on the current page's start offset;
+  /// Idempotent per (size, style). Re-anchors on the exact reading position;
   /// does not persist (the saved offset is unchanged).
   void applyViewport({
     required double maxWidth,
@@ -233,14 +247,22 @@ class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
 
     final anchor = _pendingAnchorOffset ?? s.currentPage.startOffset;
     _pendingAnchorOffset = null;
-    final pages = ref.read(textPaginationServiceProvider).paginateToFit(
-          s.document.fullText,
-          maxWidth: maxWidth,
-          maxHeight: maxHeight,
-          style: style,
-          textScaler: textScaler,
-        );
-    if (pages.isEmpty) return;
+
+    var pages = _paginationCache[key];
+    if (pages == null) {
+      pages = ref.read(textPaginationServiceProvider).paginateToFit(
+            s.document.fullText,
+            maxWidth: maxWidth,
+            maxHeight: maxHeight,
+            style: style,
+            textScaler: textScaler,
+          );
+      if (pages.isEmpty) return;
+      if (_paginationCache.length >= 4) {
+        _paginationCache.remove(_paginationCache.keys.first);
+      }
+      _paginationCache[key] = pages;
+    }
     _viewportKey = key;
     var index = pages.indexWhere(
       (p) => anchor >= p.startOffset && anchor < p.endOffset,
@@ -279,9 +301,13 @@ class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
     final s = state;
     if (s is! ReaderReady) return;
     final page = s.currentPage;
+    // Until the first fit re-pagination, the exact resume offset lives in
+    // _pendingAnchorOffset; prefer it so an early exit keeps the precise
+    // position rather than the placeholder page's start.
+    final offset = _pendingAnchorOffset ?? page.startOffset;
     final locator = ReaderLocator(
       locatorType: ReaderLocatorTypes.textOffset,
-      locatorValue: page.startOffset.toString(),
+      locatorValue: offset.toString(),
       pageNumber: s.pageIndex,
       percent: s.progress.percent,
     );

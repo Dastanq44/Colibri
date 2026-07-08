@@ -36,7 +36,9 @@ class AmplitudeAnalyticsRepository implements AnalyticsRepository {
 
   @override
   Future<void> setEnabled(bool enabled) async {
+    // Gate at the source: logEvent/logScreenView short-circuit on `_enabled`,
+    // so no events are tracked when disabled. (Mutating configuration.optOut
+    // here would not reach the already-initialized native SDK.)
     _enabled = enabled;
-    _amplitude.configuration.optOut = !enabled;
   }
 }
