@@ -33,17 +33,44 @@ Deno.serve(async (req: Request) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  // Best-effort: private book files live under <user id>/... in the bucket.
+  // Best-effort: private book files are stored NESTED as
+  // <user id>/<book uuid>/<file>, and storage list() is per-folder — so
+  // walk one level of book folders and remove their files.
   try {
-    const { data: objects } = await admin.storage
-      .from("book-files-private")
-      .list(user.id, { limit: 1000 });
-    const paths = (objects ?? []).map((o) => `${user.id}/${o.name}`);
-    if (paths.length > 0) {
-      await admin.storage.from("book-files-private").remove(paths);
+    const bucket = admin.storage.from("book-files-private");
+    const { data: bookDirs } = await bucket.list(user.id, { limit: 1000 });
+    const paths: string[] = [];
+    for (const dir of bookDirs ?? []) {
+      const { data: files } = await bucket.list(`${user.id}/${dir.name}`, {
+        limit: 1000,
+      });
+      for (const f of files ?? []) {
+        paths.push(`${user.id}/${dir.name}/${f.name}`);
+      }
     }
+    if (paths.length > 0) await bucket.remove(paths);
   } catch (_) {
     // Row cleanup still proceeds; orphaned objects can be swept later.
+  }
+
+  // Uploaded book METADATA rows don't cascade from auth.users (books has no
+  // user column) — delete them explicitly or titles of the user's uploads
+  // would outlive the account. Catalog rows are untouched.
+  try {
+    const { data: owned } = await admin
+      .from("book_files")
+      .select("book_id")
+      .eq("owner_id", user.id);
+    const ids = (owned ?? []).map((r: { book_id: string }) => r.book_id);
+    if (ids.length > 0) {
+      await admin
+        .from("books")
+        .delete()
+        .in("id", ids)
+        .eq("source_type", "upload");
+    }
+  } catch (_) {
+    // Non-fatal: rows become orphaned metadata; sweep later.
   }
 
   const { error } = await admin.auth.admin.deleteUser(user.id);
