@@ -275,12 +275,17 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     final reader = ref.read(readerControllerProvider(widget.bookId).notifier);
     final engine = ref.read(fastModeEngineProvider(widget.bookId));
     if (to == ReaderMode.fast) {
-      // Seek only when the engine's token is outside the current page; inside
-      // it, the engine's finer-grained position wins (no rewind to page start).
       final state = ref.read(readerControllerProvider(widget.bookId));
       if (state is ReaderReady) {
         final page = state.currentPage;
-        if (shouldSeekFastEngine(
+        final marked = state.highlightOffset;
+        if (marked != null) {
+          // A word the reader long-pressed (or the resume marker) is an
+          // explicit "start fast mode here" point — always honour it.
+          engine.seekToOffset(marked);
+        } else if (shouldSeekFastEngine(
+          // Otherwise seek only when the engine's token is outside the current
+          // page; inside it the engine's finer position wins (no rewind).
           engineOffset: engine.currentStartOffset,
           pageStart: page.startOffset,
           pageEnd: page.endOffset,
