@@ -21,152 +21,184 @@ class ReaderSettingsSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final repo = ref.read(readerSettingsRepositoryProvider);
-    final settings =
-        ref.watch(readerSettingsProvider).valueOrNull ?? ReaderSettings.defaults();
+    final settings = ref.watch(readerSettingsProvider).valueOrNull ??
+        ReaderSettings.defaults();
     final fast = ref.watch(fastModeSettingsProvider);
 
     return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text(l10n.readerSettingsTitle,
-                style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 16),
-            Text(l10n.settingsProfiles),
-            const SizedBox(height: 4),
-            Text(l10n.settingsProfilesHint,
-                style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          // Pinned header so the close button stays reachable no matter how far
+          // the (tall, scroll-controlled) settings list is scrolled — the sheet
+          // otherwise fills the screen and swallows swipe-to-dismiss on iOS.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+            child: Row(
               children: <Widget>[
-                for (final profile in ReadingProfile.values)
-                  ActionChip(
-                    label: Text(_profileLabel(l10n, profile)),
-                    onPressed: () => repo.applyProfile(profile),
+                Expanded(
+                  child: Text(l10n.readerSettingsTitle,
+                      style: Theme.of(context).textTheme.titleLarge),
+                ),
+                IconButton(
+                  tooltip: l10n.dialogClose,
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
+              ],
+            ),
+          ),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(l10n.settingsProfiles),
+                  const SizedBox(height: 4),
+                  Text(l10n.settingsProfilesHint,
+                      style: Theme.of(context).textTheme.bodySmall),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      for (final profile in ReadingProfile.values)
+                        ActionChip(
+                          label: Text(_profileLabel(l10n, profile)),
+                          onPressed: () => repo.applyProfile(profile),
+                        ),
+                    ],
                   ),
-              ],
+                  const SizedBox(height: 16),
+                  Text(l10n.settingsTheme),
+                  const SizedBox(height: 8),
+                  SegmentedButton<ReaderThemeVariant>(
+                    segments: <ButtonSegment<ReaderThemeVariant>>[
+                      ButtonSegment(
+                          value: ReaderThemeVariant.light,
+                          label: Text(l10n.themeLight)),
+                      ButtonSegment(
+                          value: ReaderThemeVariant.sepia,
+                          label: Text(l10n.themeSepia)),
+                      ButtonSegment(
+                          value: ReaderThemeVariant.dark,
+                          label: Text(l10n.themeDark)),
+                    ],
+                    selected: <ReaderThemeVariant>{settings.theme},
+                    onSelectionChanged: (s) => repo.setTheme(s.first),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(l10n.settingsFontFamily),
+                  const SizedBox(height: 8),
+                  SegmentedButton<ReaderFontFamily>(
+                    segments: <ButtonSegment<ReaderFontFamily>>[
+                      ButtonSegment(
+                          value: ReaderFontFamily.system,
+                          label: Text(l10n.fontFamilySystem)),
+                      ButtonSegment(
+                          value: ReaderFontFamily.serif,
+                          label: Text(l10n.fontFamilySerif)),
+                      ButtonSegment(
+                          value: ReaderFontFamily.monospace,
+                          label: Text(l10n.fontFamilyMonospace)),
+                    ],
+                    selected: <ReaderFontFamily>{settings.fontFamily},
+                    onSelectionChanged: (s) => repo.setFontFamily(s.first),
+                  ),
+                  const SizedBox(height: 8),
+                  _StepperRow(
+                    label: l10n.settingsFontSize,
+                    value: '${settings.fontSize}',
+                    onDecrease: () => repo.setFontSize((settings.fontSize - 1)
+                        .clamp(ReaderSettings.minFontSize,
+                            ReaderSettings.maxFontSize)),
+                    onIncrease: () => repo.setFontSize((settings.fontSize + 1)
+                        .clamp(ReaderSettings.minFontSize,
+                            ReaderSettings.maxFontSize)),
+                  ),
+                  _StepperRow(
+                    label: l10n.settingsLineHeight,
+                    value: settings.lineHeight.toStringAsFixed(1),
+                    onDecrease: () => repo.setLineHeight(
+                        (settings.lineHeight - 0.1).clamp(
+                            ReaderSettings.minLineHeight,
+                            ReaderSettings.maxLineHeight)),
+                    onIncrease: () => repo.setLineHeight(
+                        (settings.lineHeight + 0.1).clamp(
+                            ReaderSettings.minLineHeight,
+                            ReaderSettings.maxLineHeight)),
+                  ),
+                  _StepperRow(
+                    label: l10n.settingsLetterSpacing,
+                    value: settings.letterSpacing.toStringAsFixed(1),
+                    onDecrease: () => repo.setLetterSpacing(
+                        (settings.letterSpacing - 0.1).clamp(
+                            ReaderSettings.minLetterSpacing,
+                            ReaderSettings.maxLetterSpacing)),
+                    onIncrease: () => repo.setLetterSpacing(
+                        (settings.letterSpacing + 0.1).clamp(
+                            ReaderSettings.minLetterSpacing,
+                            ReaderSettings.maxLetterSpacing)),
+                  ),
+                  _StepperRow(
+                    label: l10n.settingsDefaultWpm,
+                    value: '${fast.wpm} ${l10n.wpm}',
+                    onDecrease: () => repo.setDefaultWpm(
+                        (fast.wpm - fast.step).clamp(fast.minWpm, fast.maxWpm)),
+                    onIncrease: () => repo.setDefaultWpm(
+                        (fast.wpm + fast.step).clamp(fast.minWpm, fast.maxWpm)),
+                  ),
+                  const Divider(height: 24),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(l10n.settingsPageAnimation),
+                    value: settings.pageAnimationEnabled,
+                    onChanged: repo.setPageAnimationEnabled,
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(l10n.settingsHaptics),
+                    value: settings.hapticsEnabled,
+                    onChanged: repo.setHapticsEnabled,
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(l10n.settingsReducedMotion),
+                    value: settings.reducedMotion,
+                    onChanged: repo.setReducedMotion,
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(l10n.readerModeLock),
+                    value: settings.modeLockEnabled,
+                    // Same haptic as the reader's bottom-bar lock button
+                    // (TASK-1007: mode lock toggle).
+                    onChanged: (value) {
+                      if (settings.hapticsEnabled) {
+                        unawaited(HapticFeedback.selectionClick());
+                      }
+                      repo.setModeLock(value);
+                    },
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(l10n.settingsSpeedLock),
+                    value: settings.speedLockEnabled,
+                    onChanged: repo.setSpeedLock,
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(l10n.settingsShowAdjacent),
+                    value: fast.showAdjacentContext,
+                    onChanged: repo.setShowAdjacentContext,
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            Text(l10n.settingsTheme),
-            const SizedBox(height: 8),
-            SegmentedButton<ReaderThemeVariant>(
-              segments: <ButtonSegment<ReaderThemeVariant>>[
-                ButtonSegment(
-                    value: ReaderThemeVariant.light, label: Text(l10n.themeLight)),
-                ButtonSegment(
-                    value: ReaderThemeVariant.sepia, label: Text(l10n.themeSepia)),
-                ButtonSegment(
-                    value: ReaderThemeVariant.dark, label: Text(l10n.themeDark)),
-              ],
-              selected: <ReaderThemeVariant>{settings.theme},
-              onSelectionChanged: (s) => repo.setTheme(s.first),
-            ),
-            const SizedBox(height: 16),
-            Text(l10n.settingsFontFamily),
-            const SizedBox(height: 8),
-            SegmentedButton<ReaderFontFamily>(
-              segments: <ButtonSegment<ReaderFontFamily>>[
-                ButtonSegment(
-                    value: ReaderFontFamily.system,
-                    label: Text(l10n.fontFamilySystem)),
-                ButtonSegment(
-                    value: ReaderFontFamily.serif,
-                    label: Text(l10n.fontFamilySerif)),
-                ButtonSegment(
-                    value: ReaderFontFamily.monospace,
-                    label: Text(l10n.fontFamilyMonospace)),
-              ],
-              selected: <ReaderFontFamily>{settings.fontFamily},
-              onSelectionChanged: (s) => repo.setFontFamily(s.first),
-            ),
-            const SizedBox(height: 8),
-            _StepperRow(
-              label: l10n.settingsFontSize,
-              value: '${settings.fontSize}',
-              onDecrease: () => repo.setFontSize((settings.fontSize - 1)
-                  .clamp(ReaderSettings.minFontSize, ReaderSettings.maxFontSize)),
-              onIncrease: () => repo.setFontSize((settings.fontSize + 1)
-                  .clamp(ReaderSettings.minFontSize, ReaderSettings.maxFontSize)),
-            ),
-            _StepperRow(
-              label: l10n.settingsLineHeight,
-              value: settings.lineHeight.toStringAsFixed(1),
-              onDecrease: () => repo.setLineHeight((settings.lineHeight - 0.1).clamp(
-                  ReaderSettings.minLineHeight, ReaderSettings.maxLineHeight)),
-              onIncrease: () => repo.setLineHeight((settings.lineHeight + 0.1).clamp(
-                  ReaderSettings.minLineHeight, ReaderSettings.maxLineHeight)),
-            ),
-            _StepperRow(
-              label: l10n.settingsLetterSpacing,
-              value: settings.letterSpacing.toStringAsFixed(1),
-              onDecrease: () => repo.setLetterSpacing(
-                  (settings.letterSpacing - 0.1).clamp(
-                      ReaderSettings.minLetterSpacing,
-                      ReaderSettings.maxLetterSpacing)),
-              onIncrease: () => repo.setLetterSpacing(
-                  (settings.letterSpacing + 0.1).clamp(
-                      ReaderSettings.minLetterSpacing,
-                      ReaderSettings.maxLetterSpacing)),
-            ),
-            _StepperRow(
-              label: l10n.settingsDefaultWpm,
-              value: '${fast.wpm} ${l10n.wpm}',
-              onDecrease: () => repo.setDefaultWpm(
-                  (fast.wpm - fast.step).clamp(fast.minWpm, fast.maxWpm)),
-              onIncrease: () => repo.setDefaultWpm(
-                  (fast.wpm + fast.step).clamp(fast.minWpm, fast.maxWpm)),
-            ),
-            const Divider(height: 24),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(l10n.settingsPageAnimation),
-              value: settings.pageAnimationEnabled,
-              onChanged: repo.setPageAnimationEnabled,
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(l10n.settingsHaptics),
-              value: settings.hapticsEnabled,
-              onChanged: repo.setHapticsEnabled,
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(l10n.settingsReducedMotion),
-              value: settings.reducedMotion,
-              onChanged: repo.setReducedMotion,
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(l10n.readerModeLock),
-              value: settings.modeLockEnabled,
-              // Same haptic as the reader's bottom-bar lock button
-              // (TASK-1007: mode lock toggle).
-              onChanged: (value) {
-                if (settings.hapticsEnabled) {
-                  unawaited(HapticFeedback.selectionClick());
-                }
-                repo.setModeLock(value);
-              },
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(l10n.settingsSpeedLock),
-              value: settings.speedLockEnabled,
-              onChanged: repo.setSpeedLock,
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(l10n.settingsShowAdjacent),
-              value: fast.showAdjacentContext,
-              onChanged: repo.setShowAdjacentContext,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

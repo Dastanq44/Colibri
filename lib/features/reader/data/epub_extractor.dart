@@ -36,6 +36,11 @@ class EpubExtractor {
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
   };
 
+  /// HTML "ASCII whitespace" (Tab, LF, FF, CR, Space). Runs of it inside text
+  /// content are insignificant and collapse to a single space — this excludes
+  /// NBSP (U+00A0) and other Unicode spaces, which are kept verbatim.
+  static final RegExp _asciiWhitespace = RegExp(r'[\t\n\f\r ]+');
+
   EpubExtractionResult? extract(List<int> bytes) {
     try {
       final archive = ZipDecoder().decodeBytes(bytes);
@@ -270,10 +275,19 @@ class EpubExtractor {
     return text.trim();
   }
 
-  void _walk(dom.Node node, StringBuffer buffer) {
+  void _walk(dom.Node node, StringBuffer buffer, {bool pre = false}) {
     for (final child in node.nodes) {
       if (child is dom.Text) {
-        buffer.write(child.text);
+        // Most EPUBs hard-wrap their XHTML source at ~70–80 columns, so a
+        // single paragraph's text arrives split across several source lines.
+        // Those newlines are insignificant HTML whitespace: collapse every run
+        // of ASCII whitespace to one space (as a browser would) so a sentence
+        // stays one flowing line. Only <br> and block boundaries — written
+        // explicitly below — become real line breaks. Inside <pre> the
+        // whitespace is significant, so keep it verbatim.
+        buffer.write(
+          pre ? child.text : child.text.replaceAll(_asciiWhitespace, ' '),
+        );
       } else if (child is dom.Element) {
         final tag = child.localName;
         if (tag == 'br') {
@@ -282,7 +296,7 @@ class EpubExtractor {
         }
         final isBlock = _blockTags.contains(tag);
         if (isBlock) buffer.write('\n');
-        _walk(child, buffer);
+        _walk(child, buffer, pre: pre || tag == 'pre');
         if (isBlock) buffer.write('\n');
       }
     }

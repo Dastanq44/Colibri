@@ -116,6 +116,7 @@
   "removeBookTitle": "Remove book?",
   "removeBookBody": "This removes the local file and reading progress from this device.",
   "dialogCancel": "Cancel",
+  "dialogClose": "Close",
   "wpm": "WPM",
   "fastPlay": "Play",
   "fastPause": "Pause",
