@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 
@@ -6,6 +8,7 @@ import '../../core/result/result.dart';
 import '../../features/catalog/domain/catalog_book.dart';
 import '../../features/import/data/file_storage_service.dart';
 import '../../features/library/domain/library_book.dart';
+import '../../features/reader/data/epub_extractor.dart';
 import '../../features/sync/data/local_sync_queue_repository.dart';
 import '../../shared/models/book_format.dart';
 import '../../shared/models/bookshelf_status.dart';
@@ -56,6 +59,9 @@ class LocalLibraryRepository implements LibraryRepository {
           : DateTime.tryParse(book.lastOpenedAt!),
       hasLocalFile: book.fileLocalPath.isNotEmpty,
       cloudBookId: book.cloudBookId,
+      coverPath: book.coverLocalPath,
+      language: book.language,
+      isFavorite: shelf?.isFavorite ?? false,
     );
   }
 
@@ -85,6 +91,53 @@ class LocalLibraryRepository implements LibraryRepository {
     } catch (e) {
       return Err(StorageFailure(e.toString()));
     }
+  }
+
+  @override
+  Future<Result<void>> setFavorite(String bookId, bool favorite) async {
+    try {
+      await _db.bookshelfDao.setFavorite(bookId, favorite);
+      return const Ok(null);
+    } catch (e) {
+      return Err(StorageFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<int> backfillCovers() async {
+    var added = 0;
+    try {
+      const extractor = EpubExtractor();
+      final books = await _db.booksDao.getAll();
+      for (final book in books) {
+        if (book.coverLocalPath != null ||
+            book.format != BookFormat.epub.wire ||
+            book.fileLocalPath.isEmpty) {
+          continue;
+        }
+        try {
+          final file = File(book.fileLocalPath);
+          if (!await file.exists()) continue;
+          final cover = extractor.extractCover(await file.readAsBytes());
+          if (cover == null) continue;
+          final path = await _storage.saveCoverBytes(
+            bookId: book.id,
+            bytes: cover.bytes,
+            extension: cover.extension,
+          );
+          await _db.booksDao.upsertBook(LocalBooksCompanion(
+            id: Value(book.id),
+            coverLocalPath: Value(path),
+          ));
+          added++;
+        } catch (_) {
+          // Cosmetic; skip this book and keep going.
+        }
+      }
+    } catch (_) {
+      // Best-effort sweep — never surface an error for covers.
+    }
+    return added;
   }
 
   @override

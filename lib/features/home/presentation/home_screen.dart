@@ -7,8 +7,9 @@ import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
 import '../../../app/widgets/large_title_scaffold.dart';
 import '../../../data/repositories/analytics_repository.dart';
-import '../../../shared/models/book_format.dart';
+import '../../../shared/widgets/book_cover.dart';
 import '../../catalog/domain/catalog_book.dart';
+import '../../library/application/library_providers.dart';
 import '../../library/domain/library_book.dart';
 import '../../recommendations/application/recommendation_providers.dart';
 import '../../recommendations/domain/recommendation_rail.dart';
@@ -25,6 +26,9 @@ class HomeScreen extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final hasBooks = ref.watch(hasAnyBooksProvider);
     final continueReading = ref.watch(continueReadingProvider);
+    // Covers for pre-cover-support imports appear wherever the user lands
+    // first (session-scoped backfill; also watched by the library screen).
+    ref.watch(coverBackfillProvider);
 
     // Loading renders blank (a local read, typically < 1 frame) so the
     // full layout doesn't flash before the empty state resolves.
@@ -81,51 +85,57 @@ class _RecommendationRailRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    // Apple-Books-style rail: cover box, then title, then author · language.
     return SizedBox(
-      height: 120,
+      height: 226,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: rail.books.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
           final CatalogBook book = rail.books[index];
+          final author = book.authorDisplay;
+          final language = (book.language ?? '').toUpperCase();
+          final byline = <String>[
+            if (author.isNotEmpty) author,
+            if (language.isNotEmpty) language,
+          ].join(' · ');
           return SizedBox(
-            width: 150,
-            child: Card(
-              margin: EdgeInsets.zero,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () {
-                  ref.read(analyticsRepositoryProvider).logEvent(
-                    'recommendation_clicked',
-                    params: {'reason': rail.reason.name},
-                  );
-                  context.push(AppRoutes.bookDetail(book.id));
-                },
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Icon(CupertinoIcons.book,
-                          color: theme.colorScheme.primary),
-                      const SizedBox(height: 8),
-                      Text(
-                        book.title,
-                        style: theme.textTheme.bodyMedium,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (book.authorDisplay.isNotEmpty)
-                        Text(
-                          book.authorDisplay,
-                          style: theme.textTheme.bodySmall,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                    ],
+            width: 112,
+            child: GestureDetector(
+              onTap: () {
+                ref.read(analyticsRepositoryProvider).logEvent(
+                  'recommendation_clicked',
+                  params: {'reason': rail.reason.name},
+                );
+                context.push(AppRoutes.bookDetail(book.id));
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  BookCover(
+                    coverUrl: book.coverUrl,
+                    width: 112,
+                    height: 158,
+                    borderRadius: 10,
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  Text(
+                    book.title,
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (byline.isNotEmpty)
+                    Text(
+                      byline,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
               ),
             ),
           );
@@ -137,11 +147,11 @@ class _RecommendationRailRow extends ConsumerWidget {
 
 /// iOS-style rounded, accent-tinted icon "chip" used as a card leading glyph.
 class _LeadingIcon extends StatelessWidget {
-  const _LeadingIcon(this.icon, {this.box = 44, this.glyph = 22});
+  const _LeadingIcon(this.icon);
 
   final IconData icon;
-  final double box;
-  final double glyph;
+  static const double box = 44;
+  static const double glyph = 22;
 
   @override
   Widget build(BuildContext context) {
@@ -210,10 +220,10 @@ class _BookCard extends StatelessWidget {
           padding: EdgeInsets.all(large ? 16 : 12),
           child: Row(
             children: <Widget>[
-              _LeadingIcon(
-                _formatIcon(book.format),
-                box: large ? 52 : 40,
-                glyph: large ? 26 : 20,
+              BookCover(
+                coverPath: book.coverPath,
+                width: large ? 56 : 42,
+                height: large ? 80 : 60,
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -255,11 +265,6 @@ class _BookCard extends StatelessWidget {
     );
   }
 
-  IconData _formatIcon(BookFormat format) => switch (format) {
-        BookFormat.epub => CupertinoIcons.book,
-        BookFormat.txt => CupertinoIcons.doc_text,
-        BookFormat.pdf => CupertinoIcons.doc_richtext,
-      };
 }
 
 class _GoalCard extends StatelessWidget {

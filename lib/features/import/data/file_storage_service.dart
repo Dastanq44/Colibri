@@ -33,6 +33,22 @@ class FileStorageService {
     return destPath;
   }
 
+  /// Writes a book's cover image next to its file
+  /// (`books/<bookId>/cover.<ext>`) so it is removed together with the book.
+  /// Returns the saved path.
+  Future<String> saveCoverBytes({
+    required String bookId,
+    required List<int> bytes,
+    required String extension,
+  }) async {
+    final root = await _booksRoot();
+    final destDir = Directory(p.join(root.path, bookId));
+    await destDir.create(recursive: true);
+    final destPath = p.join(destDir.path, 'cover.$extension');
+    await File(destPath).writeAsBytes(bytes, flush: true);
+    return destPath;
+  }
+
   /// Best-effort removal of a book's storage folder.
   Future<void> deleteBookStorage(String bookId) async {
     final root = await _booksRoot();

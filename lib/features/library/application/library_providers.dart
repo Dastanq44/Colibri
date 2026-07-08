@@ -32,3 +32,15 @@ final libraryCloudRefreshProvider = FutureProvider<int>((ref) async {
 final myBooksProvider = StreamProvider<List<LibraryBook>>((ref) {
   return ref.watch(libraryRepositoryProvider).watchMyBooks();
 });
+
+/// Favourite books (subset of [myBooksProvider], reactive).
+final favoriteBooksProvider = Provider<List<LibraryBook>>((ref) {
+  final books = ref.watch(myBooksProvider).valueOrNull ?? const <LibraryBook>[];
+  return books.where((b) => b.isFavorite).toList();
+});
+
+/// One best-effort covers backfill per app session, for EPUBs imported before
+/// cover extraction existed. Watched by the library screen; silent by design.
+final coverBackfillProvider = FutureProvider<int>((ref) {
+  return ref.watch(libraryRepositoryProvider).backfillCovers();
+});

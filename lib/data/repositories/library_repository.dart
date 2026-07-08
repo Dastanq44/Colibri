@@ -14,6 +14,13 @@ abstract interface class LibraryRepository {
   /// Updates a book's shelf status.
   Future<Result<void>> updateBookStatus(String bookId, BookShelfStatus status);
 
+  /// Marks/unmarks a book as favourite.
+  Future<Result<void>> setFavorite(String bookId, bool favorite);
+
+  /// Extracts covers for already-imported EPUBs that predate cover support.
+  /// Best-effort and idempotent; returns how many covers were added.
+  Future<int> backfillCovers();
+
   /// Removes all local records for the book (and its on-disk file).
   Future<Result<void>> removeBookFromLibrary(String bookId);
 

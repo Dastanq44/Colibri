@@ -2,13 +2,19 @@ import 'dart:async';
 
 import 'package:colibri/app/localization/generated/app_localizations.dart';
 import 'package:colibri/core/result/result.dart';
+import 'package:colibri/data/local/app_database.dart';
+import 'package:colibri/data/local/database_providers.dart';
 import 'package:colibri/data/remote/supabase_client_provider.dart';
 import 'package:colibri/data/repositories/profile_repository.dart';
 import 'package:colibri/features/auth/application/auth_providers.dart';
 import 'package:colibri/features/auth/domain/auth_user.dart';
+import 'package:colibri/features/library/application/library_providers.dart';
+import 'package:colibri/features/library/domain/library_book.dart';
 import 'package:colibri/features/profile/application/profile_providers.dart';
 import 'package:colibri/features/profile/domain/profile.dart';
+import 'package:colibri/features/profile/presentation/edit_profile_screen.dart';
 import 'package:colibri/features/profile/presentation/profile_screen.dart';
+import 'package:drift/native.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -63,48 +69,41 @@ void main() {
     expect(find.text('Sign in'), findsOneWidget);
   });
 
-  testWidgets('Edit name tolerates sign-out while the update is in flight',
+  testWidgets('Edit profile save tolerates unmount while the update is in flight',
       (tester) async {
     final repo = _FakeProfileRepository();
-    final signedIn = StateProvider<bool>((ref) => true);
+    late AppDatabase db;
+    db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: <Override>[
-          isSignedInProvider.overrideWith((ref) => ref.watch(signedIn)),
+          appDatabaseProvider.overrideWithValue(db),
           currentUserProvider.overrideWithValue(
             const AuthUser(id: 'u1', email: 'u@example.com'),
           ),
           profileRepositoryProvider.overrideWithValue(repo),
-          backendConfiguredProvider.overrideWithValue(false),
+          myBooksProvider.overrideWith(
+              (ref) => Stream.value(const <LibraryBook>[])),
         ],
         child: const MaterialApp(
           locale: Locale('en'),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: ProfileScreen(),
+          home: EditProfileScreen(),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    // Open the edit-name dialog and submit a new name.
-    await tester.tap(find.byIcon(CupertinoIcons.pencil));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(CupertinoTextField), 'New Name');
-    await tester.tap(find.text('Save'));
-    await tester.pumpAndSettle(); // dialog closed; update awaits the repo
+    // Enter a new name and hit Done; the update awaits the repo.
+    await tester.enterText(find.byType(CupertinoTextField).first, 'New Name');
+    await tester.tap(find.text('Done'));
+    await tester.pump();
 
-    // Sign out while the update is in flight: the signed-in body unmounts.
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(ProfileScreen)),
-      listen: false,
-    );
-    container.read(signedIn.notifier).state = false;
-    await tester.pumpAndSettle();
-    expect(find.byIcon(CupertinoIcons.pencil), findsNothing);
-
-    // Completing the update after unmount must not touch ref/context.
+    // Unmount the screen while the update is in flight.
+    await tester.pumpWidget(const SizedBox());
     repo.updateCompleter.complete(const Ok(null));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);

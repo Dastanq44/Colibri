@@ -6,8 +6,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
+import '../../../app/widgets/glass.dart';
 import '../../../app/widgets/glass_buttons.dart';
 import '../../../shared/models/bookshelf_status.dart';
+import '../../../shared/widgets/book_cover.dart';
 import '../application/library_providers.dart';
 import '../domain/library_book.dart';
 
@@ -26,9 +28,9 @@ String statusLabel(AppLocalizations l10n, BookShelfStatus status) =>
       BookShelfStatus.wantToRead => l10n.statusWantToRead,
     };
 
-/// "My Books" — local library backed by Drift. Shows imported books filtered
-/// by status (native iOS segmented control), with an import action and
-/// per-book status/remove actions via a native pull-down menu.
+/// "My Books" — local library backed by Drift. Book covers, swipeable status
+/// pages with a scrollable glass category bar, and per-book actions via a
+/// native pull-down menu.
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
 
@@ -36,8 +38,10 @@ class LibraryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final booksAsync = ref.watch(myBooksProvider);
-    // Kick off the once-per-session cloud-shelf pull (no-op signed out).
+    // Kick off the once-per-session cloud-shelf pull (no-op signed out) and
+    // the cover backfill for books imported before cover support.
     ref.watch(libraryCloudRefreshProvider);
+    ref.watch(coverBackfillProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -99,9 +103,9 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-/// Status filter as a native iOS segmented control (real `UISegmentedControl`
-/// via `cupertino_native`) driving a single list; Material `TabBar` reads as
-/// Android. Falls back to `CupertinoSlidingSegmentedControl` off-iOS.
+/// Swipeable status pages + a scrollable glass category bar. Swiping the page
+/// left/right changes the category; tapping a pill jumps to it. The bar is
+/// not fixed-width: categories can scroll beyond the visible edge.
 class _LibraryTabs extends StatefulWidget {
   const _LibraryTabs({required this.books});
 
@@ -112,46 +116,145 @@ class _LibraryTabs extends StatefulWidget {
 }
 
 class _LibraryTabsState extends State<_LibraryTabs> {
+  final PageController _pages = PageController();
+  final ScrollController _barScroll = ScrollController();
+  final List<GlobalKey> _pillKeys =
+      List<GlobalKey>.generate(_statusTabs.length, (_) => GlobalKey());
   int _selected = 0;
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    _barScroll.dispose();
+    super.dispose();
+  }
+
+  void _select(int index, {bool fromSwipe = false}) {
+    if (index == _selected) return;
+    setState(() => _selected = index);
+    if (!fromSwipe) {
+      _pages.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    // Keep the active pill visible as the selection moves.
+    final ctx = _pillKeys[index].currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 250),
+        alignment: 0.5,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final labels = <String>[
-      for (final status in _statusTabs) statusLabel(l10n, status),
-    ];
-    final isIos = Theme.of(context).platform == TargetPlatform.iOS;
-    final status = _statusTabs[_selected];
-
     return Column(
       children: <Widget>[
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-          child: SizedBox(
-            width: double.infinity,
-            child: isIos
-                ? CNSegmentedControl(
-                    labels: labels,
-                    selectedIndex: _selected,
-                    onValueChanged: (i) => setState(() => _selected = i),
-                  )
-                : CupertinoSlidingSegmentedControl<int>(
-                    groupValue: _selected,
-                    children: <int, Widget>{
-                      for (var i = 0; i < labels.length; i++)
-                        i: Text(labels[i]),
-                    },
-                    onValueChanged: (i) =>
-                        setState(() => _selected = i ?? _selected),
-                  ),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+          child: _CategoryBar(
+            controller: _barScroll,
+            labels: <String>[
+              for (final status in _statusTabs) statusLabel(l10n, status),
+            ],
+            pillKeys: _pillKeys,
+            selected: _selected,
+            onTap: _select,
           ),
         ),
         Expanded(
-          child: _BookList(
-            books: widget.books.where((b) => b.status == status).toList(),
+          child: PageView(
+            controller: _pages,
+            onPageChanged: (i) => _select(i, fromSwipe: true),
+            children: <Widget>[
+              for (final status in _statusTabs)
+                _BookList(
+                  books:
+                      widget.books.where((b) => b.status == status).toList(),
+                ),
+            ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Scrollable capsule bar in the sliding-segmented style: frosted glass
+/// track, white "thumb" behind the selected label. Slightly taller (44) than
+/// a stock segmented control.
+class _CategoryBar extends StatelessWidget {
+  const _CategoryBar({
+    required this.controller,
+    required this.labels,
+    required this.pillKeys,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final ScrollController controller;
+  final List<String> labels;
+  final List<GlobalKey> pillKeys;
+  final int selected;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    return GlassSurface(
+      borderRadius: const BorderRadius.all(Radius.circular(22)),
+      blur: 14,
+      padding: const EdgeInsets.all(3),
+      child: SizedBox(
+        height: 38,
+        child: ListView.separated(
+          controller: controller,
+          scrollDirection: Axis.horizontal,
+          itemCount: labels.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 4),
+          itemBuilder: (context, i) {
+            final active = i == selected;
+            return AnimatedContainer(
+              key: pillKeys[i],
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              decoration: BoxDecoration(
+                color: active
+                    ? (isDark ? const Color(0xFF636366) : Colors.white)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(19),
+                boxShadow: active
+                    ? <BoxShadow>[
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                minimumSize: Size.zero,
+                onPressed: () => onTap(i),
+                child: Text(
+                  labels[i],
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: theme.colorScheme.onSurface,
+                    fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }
@@ -194,46 +297,35 @@ class _BookCard extends ConsumerWidget {
     return '${local.year}-${two(local.month)}-${two(local.day)}';
   }
 
-  Future<void> _onAction(
+  Future<void> _confirmRemove(
     BuildContext context,
     WidgetRef ref,
     AppLocalizations l10n,
-    _CardAction action,
   ) async {
-    final repo = ref.read(libraryRepositoryProvider);
-    if (action.isRemove) {
-      // iOS-native confirmation: centered alert with a destructive action.
-      final confirmed = await showCupertinoDialog<bool>(
-        context: context,
-        builder: (ctx) => CupertinoAlertDialog(
-          title: Text(l10n.removeBookTitle),
-          content: Text(l10n.removeBookBody),
-          actions: <Widget>[
-            CupertinoDialogAction(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(l10n.dialogCancel),
-            ),
-            CupertinoDialogAction(
-              isDestructiveAction: true,
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(l10n.libraryRemove),
-            ),
-          ],
+    // Modern iOS destructive confirmation: bottom action sheet.
+    final confirmed = await showCupertinoModalPopup<bool>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: Text(l10n.removeBookTitle),
+        message: Text(l10n.removeBookBody),
+        actions: <Widget>[
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(l10n.libraryRemove),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.pop(ctx, false),
+          child: Text(l10n.dialogCancel),
         ),
-      );
-      if (confirmed ?? false) {
-        await repo.removeBookFromLibrary(book.id);
-      }
-    } else if (action.status != null) {
-      await repo.updateBookStatus(book.id, action.status!);
+      ),
+    );
+    if (confirmed ?? false) {
+      await ref.read(libraryRepositoryProvider).removeBookFromLibrary(book.id);
     }
   }
-
-  /// Menu entries in display order; index-aligned with [_actionAt].
-  List<_CardAction> get _actions => <_CardAction>[
-        for (final status in _statusTabs) _CardAction.status(status),
-        const _CardAction.remove(),
-      ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -242,16 +334,34 @@ class _BookCard extends ConsumerWidget {
     final isIos = theme.platform == TargetPlatform.iOS;
     final author =
         book.authorDisplay.isEmpty ? l10n.libraryUnknownAuthor : book.authorDisplay;
-    final actions = _actions;
 
-    // Native iOS pull-down menu (UIMenu) instead of the Android-style
-    // Material dropdown; Material PopupMenuButton stays as the fallback.
+    final favoriteLabel = book.isFavorite
+        ? l10n.libraryRemoveFromFavorites
+        : l10n.libraryAddToFavorites;
+
+    void onMenuIndex(int index) {
+      // Items: 0 favourite, 1..4 statuses, 5 divider, 6 remove.
+      if (index == 0) {
+        ref.read(libraryRepositoryProvider).setFavorite(book.id, !book.isFavorite);
+      } else if (index >= 1 && index <= _statusTabs.length) {
+        ref
+            .read(libraryRepositoryProvider)
+            .updateBookStatus(book.id, _statusTabs[index - 1]);
+      } else {
+        _confirmRemove(context, ref, l10n);
+      }
+    }
+
     final Widget menu = isIos
         ? CNPopupMenuButton.icon(
             buttonIcon: const CNSymbol('ellipsis', size: 16),
             size: 34,
             buttonStyle: CNButtonStyle.plain,
             items: <CNPopupMenuEntry>[
+              CNPopupMenuItem(
+                label: favoriteLabel,
+                icon: CNSymbol(book.isFavorite ? 'heart.fill' : 'heart'),
+              ),
               for (final status in _statusTabs)
                 CNPopupMenuItem(label: statusLabel(l10n, status)),
               const CNPopupMenuDivider(),
@@ -260,26 +370,21 @@ class _BookCard extends ConsumerWidget {
                 icon: const CNSymbol('trash'),
               ),
             ],
-            onSelected: (index) {
-              // Divider is not selectable; indexes map straight to actions
-              // (0..3 statuses, 4 remove).
-              final action =
-                  index < _statusTabs.length ? actions[index] : actions.last;
-              _onAction(context, ref, l10n, action);
-            },
+            onSelected: onMenuIndex,
           )
-        : PopupMenuButton<_CardAction>(
+        : PopupMenuButton<int>(
             tooltip: l10n.libraryChangeStatus,
-            onSelected: (action) => _onAction(context, ref, l10n, action),
-            itemBuilder: (context) => <PopupMenuEntry<_CardAction>>[
-              for (final status in _statusTabs)
-                PopupMenuItem<_CardAction>(
-                  value: _CardAction.status(status),
-                  child: Text(statusLabel(l10n, status)),
+            onSelected: onMenuIndex,
+            itemBuilder: (context) => <PopupMenuEntry<int>>[
+              PopupMenuItem<int>(value: 0, child: Text(favoriteLabel)),
+              for (var i = 0; i < _statusTabs.length; i++)
+                PopupMenuItem<int>(
+                  value: i + 1,
+                  child: Text(statusLabel(l10n, _statusTabs[i])),
                 ),
               const PopupMenuDivider(),
-              PopupMenuItem<_CardAction>(
-                value: const _CardAction.remove(),
+              PopupMenuItem<int>(
+                value: _statusTabs.length + 2,
                 child: Text(l10n.libraryRemove),
               ),
             ],
@@ -287,69 +392,62 @@ class _BookCard extends ConsumerWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        leading: _FormatBadge(label: book.format.badge),
-        title: Text(book.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(author),
-            const SizedBox(height: 2),
-            Text(
-              '${statusLabel(l10n, book.status)} · ${book.percent.round()}%'
-              '${book.lastOpenedAt != null ? ' · ${l10n.libraryLastOpened(_formatDate(book.lastOpenedAt!))}' : ''}',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: InkWell(
+          onTap: () => context.push(
+            !book.hasLocalFile && book.cloudBookId != null
+                ? AppRoutes.bookDetail(book.cloudBookId!)
+                : AppRoutes.reader(book.id),
+          ),
+          child: Row(
+            children: <Widget>[
+              BookCover(coverPath: book.coverPath, width: 52, height: 74),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        Flexible(
+                          child: Text(
+                            book.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall,
+                          ),
+                        ),
+                        if (book.isFavorite) ...<Widget>[
+                          const SizedBox(width: 6),
+                          Icon(CupertinoIcons.heart_fill,
+                              size: 14, color: theme.colorScheme.primary),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      author,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${statusLabel(l10n, book.status)} · ${book.percent.round()}%'
+                      '${book.lastOpenedAt != null ? ' · ${l10n.libraryLastOpened(_formatDate(book.lastOpenedAt!))}' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              menu,
+            ],
+          ),
         ),
-        isThreeLine: true,
-        // Cloud-only entries (no downloaded file) open Book Detail — there
-        // is nothing to read locally yet.
-        onTap: () => context.push(
-          !book.hasLocalFile && book.cloudBookId != null
-              ? AppRoutes.bookDetail(book.cloudBookId!)
-              : AppRoutes.reader(book.id),
-        ),
-        trailing: menu,
-      ),
-    );
-  }
-}
-
-/// A book-card menu action: either change status, or remove.
-class _CardAction {
-  const _CardAction.status(this.status) : isRemove = false;
-  const _CardAction.remove()
-      : status = null,
-        isRemove = true;
-
-  final BookShelfStatus? status;
-  final bool isRemove;
-}
-
-class _FormatBadge extends StatelessWidget {
-  const _FormatBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      width: 44,
-      height: 44,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context)
-            .textTheme
-            .labelSmall
-            ?.copyWith(color: scheme.primary, fontWeight: FontWeight.w700),
       ),
     );
   }

@@ -15,6 +15,9 @@ class LibraryBook {
     this.lastOpenedAt,
     this.hasLocalFile = true,
     this.cloudBookId,
+    this.coverPath,
+    this.language = '',
+    this.isFavorite = false,
   });
 
   final String id;
@@ -35,4 +38,13 @@ class LibraryBook {
 
   /// The Supabase books.id when known (navigates to catalog Book Detail).
   final String? cloudBookId;
+
+  /// Local path of the extracted cover image, when one exists.
+  final String? coverPath;
+
+  /// Language code from the book metadata ('' when unknown).
+  final String language;
+
+  /// Whether the user marked this book as a favourite.
+  final bool isFavorite;
 }

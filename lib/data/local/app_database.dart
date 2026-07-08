@@ -58,7 +58,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -85,6 +85,14 @@ class AppDatabase extends _$AppDatabase {
               m,
               localFastSettings,
               localFastSettings.naturalPausesEnabled,
+            );
+          }
+          if (from < 5) {
+            // v5: favourite books flag on the shelf entry.
+            await _addColumnIfAbsent(
+              m,
+              localBookshelf,
+              localBookshelf.isFavorite,
             );
           }
         },

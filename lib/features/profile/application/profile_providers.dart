@@ -6,6 +6,7 @@ import '../../../data/repositories/local_reading_stats_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/supabase_profile_repository.dart';
 import '../../auth/application/auth_providers.dart';
+import '../data/local_profile_repository.dart';
 import '../domain/profile.dart';
 import '../domain/reading_stats.dart';
 
@@ -28,3 +29,18 @@ final currentProfileProvider = FutureProvider<Profile?>((ref) async {
   final result = await ref.watch(profileRepositoryProvider).getCurrentProfile();
   return result.when(ok: (profile) => profile, err: (_) => null);
 });
+
+/// Device-local profile extras (avatar file, bio) — no cloud dependency.
+final localProfileRepositoryProvider = Provider<LocalProfileRepository>(
+  (ref) => LocalProfileRepository(ref.watch(appDatabaseProvider)),
+);
+
+/// Current avatar file path, or null. Invalidate after changing the avatar.
+final avatarPathProvider = FutureProvider<String?>(
+  (ref) => ref.watch(localProfileRepositoryProvider).getAvatarPath(),
+);
+
+/// Current profile bio ('' when unset). Invalidate after editing.
+final profileBioProvider = FutureProvider<String>(
+  (ref) => ref.watch(localProfileRepositoryProvider).getBio(),
+);
