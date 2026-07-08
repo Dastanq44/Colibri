@@ -40,6 +40,13 @@ class FastModeState {
       ? tokens[currentTokenIndex + 1]
       : null;
 
+  /// Token at [delta] positions from the current one (negative = earlier),
+  /// or null if out of range. Used to show a couple of context words per side.
+  FastToken? tokenAt(int delta) {
+    final i = currentTokenIndex + delta;
+    return (i >= 0 && i < tokens.length) ? tokens[i] : null;
+  }
+
   bool get isPlaying => playback == FastModePlaybackState.playing;
   bool get isLoading =>
       playback == FastModePlaybackState.idle && tokens.isEmpty;
