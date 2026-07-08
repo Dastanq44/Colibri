@@ -16,6 +16,7 @@ class AppConfig {
     required this.supabaseAnonKey,
     required this.sentryDsn,
     required this.analyticsEnabled,
+    required this.amplitudeApiKey,
   });
 
   final AppEnvironment environment;
@@ -23,6 +24,10 @@ class AppConfig {
   final String supabaseAnonKey;
   final String sentryDsn;
   final bool analyticsEnabled;
+
+  /// Amplitude write key (empty until provisioned). Analytics only sends to
+  /// Amplitude when this is set AND [analyticsEnabled] is true.
+  final String amplitudeApiKey;
 
   /// Reads configuration from the compile-time environment.
   factory AppConfig.fromEnvironment() {
@@ -35,6 +40,7 @@ class AppConfig {
       sentryDsn: const String.fromEnvironment('SENTRY_DSN'),
       analyticsEnabled:
           const bool.fromEnvironment('ANALYTICS_ENABLED', defaultValue: false),
+      amplitudeApiKey: const String.fromEnvironment('AMPLITUDE_API_KEY'),
     );
   }
 

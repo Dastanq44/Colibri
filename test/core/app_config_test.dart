@@ -11,6 +11,7 @@ void main() {
         supabaseAnonKey: '',
         sentryDsn: '',
         analyticsEnabled: false,
+      amplitudeApiKey: "",
       );
 
       expect(config.isValid, isFalse);
@@ -27,6 +28,7 @@ void main() {
         supabaseAnonKey: '',
         sentryDsn: '',
         analyticsEnabled: false,
+      amplitudeApiKey: "",
       );
 
       expect(config.isValid, isFalse);
@@ -41,6 +43,7 @@ void main() {
         supabaseAnonKey: '',
         sentryDsn: '',
         analyticsEnabled: false,
+      amplitudeApiKey: "",
       );
       const production = AppConfig(
         environment: AppEnvironment.production,
@@ -48,6 +51,7 @@ void main() {
         supabaseAnonKey: '',
         sentryDsn: '',
         analyticsEnabled: false,
+      amplitudeApiKey: "",
       );
 
       expect(staging.assertValid, throwsStateError);
@@ -61,6 +65,7 @@ void main() {
         supabaseAnonKey: 'anon-key',
         sentryDsn: '',
         analyticsEnabled: false,
+      amplitudeApiKey: "",
       );
 
       expect(config.isValid, isTrue);

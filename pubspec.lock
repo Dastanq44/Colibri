@@ -9,6 +9,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "100.0.0"
+  amplitude_flutter:
+    dependency: "direct main"
+    description:
+      name: amplitude_flutter
+      sha256: "9a9ba39fba5d9362e0b32c7a0f1d59f157ef6a672b3f10a12670770cb83bfb76"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.6.1"
   analyzer:
     dependency: transitive
     description:

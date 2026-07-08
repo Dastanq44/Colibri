@@ -11,6 +11,7 @@ void main() {
       supabaseAnonKey: '',
       sentryDsn: '',
       analyticsEnabled: false,
+      amplitudeApiKey: "",
     );
 
     // Must not touch Supabase.initialize when unconfigured.

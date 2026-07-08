@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/app_config.dart';
+import 'amplitude_analytics_repository.dart';
 
 /// Boundary for product analytics (Phase 15).
 ///
@@ -57,11 +58,15 @@ class DebugAnalyticsRepository implements AnalyticsRepository {
   Future<void> setEnabled(bool enabled) async => _enabled = enabled;
 }
 
-/// App-wide analytics, gated by [AppConfig.analyticsEnabled]. Swap the debug
-/// sink for the Amplitude adapter when the key lands.
+/// App-wide analytics sink, chosen from config:
+/// - analytics disabled           → no-op (dev default)
+/// - enabled + AMPLITUDE_API_KEY   → Amplitude
+/// - enabled, no key               → debug sink (events printed to the log)
 final analyticsRepositoryProvider = Provider<AnalyticsRepository>((ref) {
   final config = ref.watch(appConfigProvider);
-  return config.analyticsEnabled
-      ? DebugAnalyticsRepository()
-      : const NoOpAnalyticsRepository();
+  if (!config.analyticsEnabled) return const NoOpAnalyticsRepository();
+  if (config.amplitudeApiKey.isNotEmpty) {
+    return AmplitudeAnalyticsRepository(config.amplitudeApiKey);
+  }
+  return DebugAnalyticsRepository();
 });
