@@ -49,3 +49,7 @@ macos/Flutter/ephemeral/
 # OS
 .DS_Store
 Thumbs.db
+sentry.properties
+
+# Supabase CLI local link cache
+supabase/.temp/

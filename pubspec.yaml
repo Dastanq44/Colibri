@@ -57,6 +57,7 @@ dependencies:
   # sites are ready before the SDK is chosen and configured.
 
 dev_dependencies:
+  sentry_dart_plugin: ^3.4.0
   flutter_test:
     sdk: flutter
   integration_test:
@@ -84,3 +85,9 @@ flutter:
   uses-material-design: true
   # Enables `flutter gen-l10n` (configured in l10n.yaml).
   generate: true
+
+sentry:
+  upload_debug_symbols: true
+  upload_source_maps: true
+  project: flutter
+  org: dastan-mp
