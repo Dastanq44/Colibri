@@ -41,6 +41,8 @@ class LocalFastSettings extends Table {
   IntColumn get wpmStep => integer().withDefault(const Constant(25))();
   BoolColumn get showAdjacentContext =>
       boolean().withDefault(const Constant(true))();
+  BoolColumn get naturalPausesEnabled =>
+      boolean().withDefault(const Constant(true))();
   TextColumn get chunkMode => text().withDefault(const Constant('word'))();
   TextColumn get updatedAt => text().clientDefault(dbNow)();
 

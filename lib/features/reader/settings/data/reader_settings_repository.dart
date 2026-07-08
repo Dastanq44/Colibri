@@ -86,6 +86,11 @@ class ReaderSettingsRepository {
         LocalFastSettingsCompanion(showAdjacentContext: Value(value)),
       );
 
+  Future<void> setNaturalPauses(bool value) =>
+      _db.settingsDao.updateFastSettings(
+        LocalFastSettingsCompanion(naturalPausesEnabled: Value(value)),
+      );
+
   /// Writes a readability profile's values as plain settings (TASK-1003).
   /// One-tap preset, not a persistent mode — every value stays individually
   /// editable afterwards.
@@ -124,5 +129,6 @@ class ReaderSettingsRepository {
         step: row.wpmStep,
         showAdjacentContext: row.showAdjacentContext,
         speedLockEnabled: false,
+        naturalPausesEnabled: row.naturalPausesEnabled,
       );
 }

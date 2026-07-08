@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:animations/animations.dart';
+import 'package:flutter/gestures.dart' show LongPressGestureRecognizer;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart'
@@ -23,6 +24,7 @@ import '../application/reader_providers.dart';
 import '../domain/reader_locator.dart';
 import '../domain/reader_locator_types.dart';
 import '../domain/reader_mode.dart';
+import '../domain/reader_page.dart';
 import '../domain/reader_progress.dart';
 import '../fast_mode/application/fast_mode_providers.dart';
 import '../fast_mode/presentation/fast_reader_view.dart';
@@ -290,7 +292,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     } else {
       engine.pause();
       final offset = engine.currentStartOffset;
-      if (offset != null) reader.jumpToOffset(offset);
+      // Underline the last word shown in fast mode as the resume marker.
+      if (offset != null) reader.setResumeHighlight(offset);
     }
   }
 
@@ -640,6 +643,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
               onOpenMenu: () => _openReaderMenu(state),
               onPrevious: () => _turnPage(state, forward: false),
               onNext: () => _turnPage(state, forward: true),
+              onWordLongPress: (offset) {
+                _haptic(HapticFeedback.selectionClick);
+                ref
+                    .read(readerControllerProvider(widget.bookId).notifier)
+                    .setResumeHighlight(offset);
+              },
               // Suppress re-pagination while a mode switch is pending: the
               // landscape normal layout would be discarded when fast mode
               // commits (~500ms), so paginating the whole book for it is waste.
@@ -783,6 +792,7 @@ class _NormalReaderView extends StatelessWidget {
     required this.onPrevious,
     required this.onNext,
     required this.onViewport,
+    required this.onWordLongPress,
   });
 
   static const EdgeInsets _pagePadding =
@@ -809,6 +819,10 @@ class _NormalReaderView extends StatelessWidget {
     TextStyle style,
     TextScaler scaler,
   )? onViewport;
+
+  /// Called when the reader long-presses a word, with its source offset — used
+  /// to move the underlined resume marker ("continue from here").
+  final void Function(int offset) onWordLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -901,8 +915,13 @@ class _NormalReaderView extends StatelessWidget {
                             padding: _pagePadding,
                             child: Align(
                               alignment: Alignment.topLeft,
-                              child: Text(state.currentPage.text,
-                                  style: textStyle),
+                              child: _PageText(
+                                page: state.currentPage,
+                                highlightOffset: state.highlightOffset,
+                                style: textStyle,
+                                highlightColor: palette.accent,
+                                onWordLongPress: onWordLongPress,
+                              ),
                             ),
                           ),
                         ),
@@ -1000,5 +1019,87 @@ class _NormalBottomBar extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Page body rendered word-by-word so the resume marker (from a fast-mode
+/// handoff or a long-press) can be underlined, and any word long-pressed to
+/// report its source offset ("continue reading from here").
+class _PageText extends StatefulWidget {
+  const _PageText({
+    required this.page,
+    required this.highlightOffset,
+    required this.style,
+    required this.highlightColor,
+    required this.onWordLongPress,
+  });
+
+  final ReaderPage page;
+  final int? highlightOffset;
+  final TextStyle style;
+  final Color highlightColor;
+  final void Function(int offset) onWordLongPress;
+
+  @override
+  State<_PageText> createState() => _PageTextState();
+}
+
+class _PageTextState extends State<_PageText> {
+  static final RegExp _word = RegExp(r'\S+');
+  final List<LongPressGestureRecognizer> _recognizers =
+      <LongPressGestureRecognizer>[];
+
+  @override
+  void dispose() {
+    _disposeRecognizers();
+    super.dispose();
+  }
+
+  void _disposeRecognizers() {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    _recognizers.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Recognizers are per-word and rebuilt each frame; free the old ones first.
+    _disposeRecognizers();
+    final text = widget.page.text;
+    final pageStart = widget.page.startOffset;
+    final highlight = widget.highlightOffset;
+
+    final spans = <InlineSpan>[];
+    var last = 0;
+    for (final m in _word.allMatches(text)) {
+      if (m.start > last) {
+        spans.add(TextSpan(text: text.substring(last, m.start)));
+      }
+      final wordStart = pageStart + m.start;
+      final wordEnd = pageStart + m.end;
+      final isMarked =
+          highlight != null && highlight >= wordStart && highlight < wordEnd;
+      final recognizer = LongPressGestureRecognizer()
+        ..onLongPress = () => widget.onWordLongPress(wordStart);
+      _recognizers.add(recognizer);
+      spans.add(TextSpan(
+        text: m.group(0),
+        recognizer: recognizer,
+        style: isMarked
+            ? widget.style.copyWith(
+                decoration: TextDecoration.underline,
+                decorationColor: widget.highlightColor,
+                decorationThickness: 2.5,
+              )
+            : null,
+      ));
+      last = m.end;
+    }
+    if (last < text.length) {
+      spans.add(TextSpan(text: text.substring(last)));
+    }
+
+    return Text.rich(TextSpan(style: widget.style, children: spans));
   }
 }

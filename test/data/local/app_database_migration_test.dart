@@ -58,6 +58,24 @@ const String _seedSettingsRow =
     "INSERT INTO local_reader_settings (id, theme, font_size, updated_at) "
     "VALUES (1, 'dark', 26, '2026-01-01T00:00:00.000Z')";
 
+/// `local_fast_settings` as it existed at v3 (no `natural_pauses_enabled`).
+const String _fastSettingsV3 = '''
+  CREATE TABLE local_fast_settings (
+    id INTEGER NOT NULL PRIMARY KEY,
+    default_wpm INTEGER NOT NULL DEFAULT 275,
+    min_wpm INTEGER NOT NULL DEFAULT 150,
+    max_wpm INTEGER NOT NULL DEFAULT 700,
+    wpm_step INTEGER NOT NULL DEFAULT 25,
+    show_adjacent_context INTEGER NOT NULL DEFAULT 1,
+    chunk_mode TEXT NOT NULL DEFAULT 'word',
+    updated_at TEXT NOT NULL
+  )
+''';
+
+const String _seedFastRow =
+    "INSERT INTO local_fast_settings (id, default_wpm, show_adjacent_context, "
+    "updated_at) VALUES (1, 400, 0, '2026-01-01T00:00:00.000Z')";
+
 /// `sync_queue` as it existed at v1 (no `user_id`).
 const String _syncQueueV1 = '''
   CREATE TABLE sync_queue (
@@ -97,9 +115,10 @@ void main() {
   }
 
   test('v2 -> v3 adds haptics_enabled and keeps existing settings', () async {
-    await createLegacyDb(2, const [_readerSettingsV2, _seedSettingsRow]);
+    await createLegacyDb(
+        2, const [_readerSettingsV2, _seedSettingsRow, _fastSettingsV3]);
 
-    // Reopen with the real database: runs onUpgrade(from: 2, to: 3).
+    // Reopen with the real database: runs onUpgrade(from: 2).
     final db = AppDatabase.forTesting(NativeDatabase(file));
     addTearDown(db.close);
 
@@ -119,7 +138,7 @@ void main() {
       () async {
     await createLegacyDb(
       1,
-      const [_readerSettingsV2, _seedSettingsRow, _syncQueueV1],
+      const [_readerSettingsV2, _seedSettingsRow, _syncQueueV1, _fastSettingsV3],
     );
 
     final db = AppDatabase.forTesting(NativeDatabase(file));
@@ -129,6 +148,28 @@ void main() {
     final row = await db.settingsDao.getReaderSettings();
     expect(row.theme, 'dark');
     expect(row.hapticsEnabled, isTrue);
+  });
+
+  test('v3 -> v4 adds natural_pauses_enabled and keeps fast settings',
+      () async {
+    await createLegacyDb(3, const [_fastSettingsV3, _seedFastRow]);
+
+    // Reopen with the real database: runs onUpgrade(from: 3, to: 4).
+    final db = AppDatabase.forTesting(NativeDatabase(file));
+    addTearDown(db.close);
+
+    expect(await _columnsOf(db, 'local_fast_settings'),
+        contains('natural_pauses_enabled'));
+    final row = await db.settingsDao.getFastSettings();
+    expect(row.defaultWpm, 400); // pre-migration values survive
+    expect(row.showAdjacentContext, isFalse);
+    expect(row.naturalPausesEnabled, isTrue); // new column default
+
+    await db.settingsDao.updateFastSettings(
+      const LocalFastSettingsCompanion(naturalPausesEnabled: Value(false)),
+    );
+    expect((await db.settingsDao.getFastSettings()).naturalPausesEnabled,
+        isFalse);
   });
 
   test('downgrade/re-upgrade cycle does not crash on duplicate columns',

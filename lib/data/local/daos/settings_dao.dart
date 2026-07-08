@@ -92,6 +92,7 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
         maxWpm: const Value(FastDefaults.maxWpm),
         wpmStep: const Value(FastDefaults.wpmStep),
         showAdjacentContext: const Value(FastDefaults.showAdjacentContext),
+        naturalPausesEnabled: const Value(FastDefaults.naturalPausesEnabled),
         chunkMode: const Value(FastDefaults.chunkMode),
         updatedAt: Value(dbNow()),
       );

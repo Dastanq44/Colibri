@@ -194,6 +194,13 @@ class ReaderSettingsSheet extends ConsumerWidget {
                     value: fast.showAdjacentContext,
                     onChanged: repo.setShowAdjacentContext,
                   ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(l10n.settingsNaturalPauses),
+                    subtitle: Text(l10n.settingsNaturalPausesHint),
+                    value: fast.naturalPausesEnabled,
+                    onChanged: repo.setNaturalPauses,
+                  ),
                 ],
               ),
             ),

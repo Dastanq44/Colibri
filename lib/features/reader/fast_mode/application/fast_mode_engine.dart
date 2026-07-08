@@ -6,6 +6,7 @@ import '../domain/fast_mode_playback_state.dart';
 import '../domain/fast_mode_settings.dart';
 import '../domain/fast_mode_state.dart';
 import '../domain/fast_token.dart';
+import '../domain/natural_pause.dart';
 
 /// UI-independent fast-mode engine. Holds tokens + playback and advances on a
 /// WPM-driven timer. Exposes state via [ChangeNotifier] so any view (or test)
@@ -165,12 +166,29 @@ class FastModeEngine extends ChangeNotifier {
   /// Current token's source start offset (for handing off to the normal reader).
   int? get currentStartOffset => _state.currentToken?.startOffset;
 
+  /// Schedules the next advance. Uses a one-shot timer (re-armed each tick)
+  /// rather than a fixed periodic one, so the current word can linger longer
+  /// at clause/sentence/paragraph ends when natural pauses are on.
   void _startTimer() {
     _timer?.cancel();
-    _timer = Timer.periodic(
-      Duration(milliseconds: _state.millisecondsPerToken),
-      (_) => goToNextToken(),
+    _timer = Timer(_currentTokenDuration(), () {
+      goToNextToken();
+      if (_state.isPlaying) _startTimer();
+    });
+  }
+
+  /// How long the currently-shown token stays up: the base WPM interval, scaled
+  /// by its natural-pause multiplier when the feature is enabled.
+  Duration _currentTokenDuration() {
+    final base = _state.millisecondsPerToken;
+    if (!_state.settings.naturalPausesEnabled) {
+      return Duration(milliseconds: base);
+    }
+    final multiplier = NaturalPause.multiplierFor(
+      _state.currentToken,
+      _state.tokenAt(1),
     );
+    return Duration(milliseconds: (base * multiplier).round().clamp(1, 600000));
   }
 
   void _stopTimer() {

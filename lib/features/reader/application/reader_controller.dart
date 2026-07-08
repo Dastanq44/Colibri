@@ -53,12 +53,18 @@ class ReaderReady extends ReaderState {
     required this.pages,
     required this.pageIndex,
     required this.toc,
+    this.highlightOffset,
   });
 
   final ReaderDocument document;
   final List<ReaderPage> pages;
   final int pageIndex;
   final List<TocEntry> toc;
+
+  /// Source offset of the word to underline as the resume marker: the last
+  /// word shown in fast mode when handing back to normal, or a word the user
+  /// long-pressed to continue from. Null when there is no marker.
+  final int? highlightOffset;
 
   ReaderPage get currentPage => pages[pageIndex];
 
@@ -70,11 +76,18 @@ class ReaderReady extends ReaderState {
             : (pageIndex / (pages.length - 1)) * 100,
       );
 
-  ReaderReady copyWith({int? pageIndex}) => ReaderReady(
+  ReaderReady copyWith({
+    int? pageIndex,
+    int? highlightOffset,
+    bool clearHighlight = false,
+  }) =>
+      ReaderReady(
         document: document,
         pages: pages,
         pageIndex: pageIndex ?? this.pageIndex,
         toc: toc,
+        highlightOffset:
+            clearHighlight ? null : (highlightOffset ?? this.highlightOffset),
       );
 }
 
@@ -171,7 +184,7 @@ class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
     final s = state;
     if (s is! ReaderReady || !s.progress.hasNext) return;
     _pendingAnchorOffset = null; // an explicit turn supersedes a resume anchor
-    state = s.copyWith(pageIndex: s.pageIndex + 1);
+    state = s.copyWith(pageIndex: s.pageIndex + 1, clearHighlight: true);
     _persist();
   }
 
@@ -179,7 +192,25 @@ class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
     final s = state;
     if (s is! ReaderReady || !s.progress.hasPrevious) return;
     _pendingAnchorOffset = null;
-    state = s.copyWith(pageIndex: s.pageIndex - 1);
+    state = s.copyWith(pageIndex: s.pageIndex - 1, clearHighlight: true);
+    _persist();
+  }
+
+  /// Underlines [offset]'s word as the resume marker and makes it the reading
+  /// position: used for the fast→normal handoff (last word shown) and for a
+  /// long-press "continue from here" in the normal reader. Moves to the word's
+  /// page and persists the exact offset so a later resume lands on it.
+  void setResumeHighlight(int offset) {
+    final s = state;
+    if (s is! ReaderReady) return;
+    var index = s.pages.indexWhere(
+      (p) => offset >= p.startOffset && offset < p.endOffset,
+    );
+    if (index < 0) index = offset <= 0 ? 0 : s.pages.length - 1;
+    // Keep the exact word offset so re-pagination anchors on it and an early
+    // exit persists the word rather than the page start.
+    _pendingAnchorOffset = offset;
+    state = s.copyWith(pageIndex: index, highlightOffset: offset);
     _persist();
   }
 
@@ -205,7 +236,7 @@ class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
     );
     if (index < 0) index = offset <= 0 ? 0 : s.pages.length - 1;
     if (index != s.pageIndex) {
-      state = s.copyWith(pageIndex: index);
+      state = s.copyWith(pageIndex: index, clearHighlight: true);
       _persist();
     }
   }
@@ -273,6 +304,7 @@ class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
       pages: pages,
       pageIndex: index,
       toc: s.toc,
+      highlightOffset: s.highlightOffset,
     );
   }
 
