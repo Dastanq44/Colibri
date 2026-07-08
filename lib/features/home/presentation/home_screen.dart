@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
+import '../../../app/widgets/large_title_scaffold.dart';
 import '../../../data/repositories/analytics_repository.dart';
 import '../../../shared/models/book_format.dart';
 import '../../catalog/domain/catalog_book.dart';
@@ -24,40 +25,42 @@ class HomeScreen extends ConsumerWidget {
     final hasBooks = ref.watch(hasAnyBooksProvider);
     final continueReading = ref.watch(continueReadingProvider);
 
-    return Scaffold(
-      appBar: AppBar(title: Text(l10n.homeTitle)),
-      // Loading renders blank (a local read, typically < 1 frame) so the
-      // full layout doesn't flash before the empty state resolves.
-      body: switch (hasBooks) {
-        AsyncValue(isLoading: true, hasValue: false) =>
-          const SizedBox.expand(),
-        AsyncData(value: false) => _EmptyHome(l10n: l10n),
-        _ => ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+    // Loading renders blank (a local read, typically < 1 frame) so the
+    // full layout doesn't flash before the empty state resolves.
+    final Widget body = switch (hasBooks) {
+      AsyncValue(isLoading: true, hasValue: false) =>
+        const SliverToBoxAdapter(child: SizedBox.shrink()),
+      AsyncData(value: false) =>
+        SliverFillRemaining(hasScrollBody: false, child: _EmptyHome(l10n: l10n)),
+      _ => SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+          sliver: SliverList.list(
             children: <Widget>[
-              Text(l10n.homeGreeting,
-                  style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 16),
               if (continueReading.valueOrNull?.isNotEmpty ?? false) ...<Widget>[
                 _SectionHeader(l10n.homeContinueReading),
                 _ContinueReadingSection(
                     books: continueReading.requireValue, l10n: l10n),
-                const SizedBox(height: 16),
+                const SizedBox(height: 28),
               ],
               _GoalCard(l10n: l10n),
-              const SizedBox(height: 16),
+              const SizedBox(height: 28),
               _SectionHeader(l10n.homeQuickActions),
               _QuickActions(l10n: l10n),
               for (final rail
                   in ref.watch(homeRailsProvider).valueOrNull ??
                       const <RecommendationRail>[]) ...<Widget>[
-                const SizedBox(height: 16),
+                const SizedBox(height: 28),
                 _SectionHeader(_railTitle(l10n, rail.reason)),
                 _RecommendationRailRow(rail: rail),
               ],
             ],
           ),
-      },
+        ),
+    };
+
+    return LargeTitleScaffold(
+      title: l10n.homeGreeting,
+      slivers: <Widget>[body],
     );
   }
 
@@ -131,6 +134,29 @@ class _RecommendationRailRow extends ConsumerWidget {
   }
 }
 
+/// iOS-style rounded, accent-tinted icon "chip" used as a card leading glyph.
+class _LeadingIcon extends StatelessWidget {
+  const _LeadingIcon(this.icon, {this.box = 44, this.glyph = 22});
+
+  final IconData icon;
+  final double box;
+  final double glyph;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: box,
+      height: box,
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(box * 0.28),
+      ),
+      child: Icon(icon, color: scheme.primary, size: glyph),
+    );
+  }
+}
+
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader(this.text);
 
@@ -138,8 +164,8 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(text, style: Theme.of(context).textTheme.titleMedium),
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Text(text, style: Theme.of(context).textTheme.titleLarge),
       );
 }
 
@@ -183,12 +209,12 @@ class _BookCard extends StatelessWidget {
           padding: EdgeInsets.all(large ? 16 : 12),
           child: Row(
             children: <Widget>[
-              Icon(
+              _LeadingIcon(
                 _formatIcon(book.format),
-                size: large ? 48 : 32,
-                color: theme.colorScheme.primary,
+                box: large ? 52 : 40,
+                glyph: large ? 26 : 20,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -249,15 +275,17 @@ class _GoalCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: <Widget>[
-            Icon(Icons.flag_outlined, color: theme.colorScheme.primary),
-            const SizedBox(width: 12),
+            const _LeadingIcon(Icons.flag_outlined),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(l10n.homeGoalTitle, style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 2),
                   Text(l10n.homeGoalPlaceholder,
-                      style: theme.textTheme.bodySmall),
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                 ],
               ),
             ),
@@ -318,17 +346,37 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton(
-      onPressed: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(icon),
-            const SizedBox(height: 4),
-            Text(label, textAlign: TextAlign.center),
-          ],
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: theme.colorScheme.primary, size: 22),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.labelMedium,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
       ),
     );

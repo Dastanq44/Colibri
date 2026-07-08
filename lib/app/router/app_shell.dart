@@ -48,7 +48,7 @@ class AppShell extends StatelessWidget {
               ],
               currentIndex: navigationShell.currentIndex,
               onTap: _go,
-              tint: theme.colorScheme.onSurface,
+              tint: theme.colorScheme.primary,
             )
           : NavigationBar(
               selectedIndex: navigationShell.currentIndex,

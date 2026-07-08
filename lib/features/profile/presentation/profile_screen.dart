@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
+import '../../../app/widgets/large_title_scaffold.dart';
 import '../../../core/errors/failures.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../sync/application/sync_controller.dart';
@@ -20,20 +21,23 @@ class ProfileScreen extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final signedIn = ref.watch(isSignedInProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.profileTitle),
-        actions: <Widget>[
-          IconButton(
-            tooltip: l10n.settingsTitle,
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => context.push(AppRoutes.settings),
-          ),
-        ],
-      ),
-      body: signedIn
-          ? _SignedInBody(l10n: l10n)
-          : _SignedOutBody(l10n: l10n),
+    return LargeTitleScaffold(
+      title: l10n.profileTitle,
+      actions: <Widget>[
+        IconButton(
+          tooltip: l10n.settingsTitle,
+          icon: const Icon(Icons.settings_outlined),
+          onPressed: () => context.push(AppRoutes.settings),
+        ),
+      ],
+      slivers: <Widget>[
+        signedIn
+            ? _SignedInBody(l10n: l10n)
+            : SliverFillRemaining(
+                hasScrollBody: false,
+                child: _SignedOutBody(l10n: l10n),
+              ),
+      ],
     );
   }
 }
@@ -117,85 +121,87 @@ class _SignedInBody extends ConsumerWidget {
         ? profile!.displayName!
         : (user?.email ?? l10n.profileDefaultName);
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: <Widget>[
-        // Header
-        Row(
-          children: <Widget>[
-            const CircleAvatar(
-              radius: 28,
-              child: Icon(Icons.person, size: 32),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(displayName, style: theme.textTheme.titleLarge),
-                  if (user?.email != null)
-                    Text(
-                      user!.email!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            IconButton(
-              tooltip: l10n.profileEditName,
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: () =>
-                  _editName(context, ref, profile?.displayName ?? ''),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        // Local stats; avg WPM and badges stay placeholders until session
-        // tracking / badges land.
-        Builder(builder: (context) {
-          final stats = ref.watch(readingStatsProvider).valueOrNull;
-          return GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            childAspectRatio: 2.4,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+      sliver: SliverList.list(
+        children: <Widget>[
+          // Header
+          Row(
             children: <Widget>[
-              _StatCard(
-                label: l10n.profileStatsBooksRead,
-                value: stats?.booksRead.toString() ?? '—',
+              const CircleAvatar(
+                radius: 28,
+                child: Icon(Icons.person, size: 32),
               ),
-              _StatCard(
-                label: l10n.profileStatsCurrentBooks,
-                value: stats?.currentBooks.toString() ?? '—',
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(displayName, style: theme.textTheme.titleLarge),
+                    if (user?.email != null)
+                      Text(
+                        user!.email!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
               ),
-              _StatCard(
-                label: l10n.profileStatsAvgWpm,
-                value: stats?.avgWpm?.toString() ?? '—',
+              IconButton(
+                tooltip: l10n.profileEditName,
+                icon: const Icon(Icons.edit_outlined),
+                onPressed: () =>
+                    _editName(context, ref, profile?.displayName ?? ''),
               ),
-              _StatCard(label: l10n.profileStatsBadges, value: '—'),
             ],
-          );
-        }),
-        const SizedBox(height: 24),
-        _SyncSection(l10n: l10n),
-        const SizedBox(height: 8),
-        ListTile(
-          leading: const Icon(Icons.settings_outlined),
-          title: Text(l10n.settingsTitle),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => context.push(AppRoutes.settings),
-        ),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: () => ref.read(authRepositoryProvider).signOut(),
-          icon: const Icon(Icons.logout),
-          label: Text(l10n.profileSignOut),
-        ),
-      ],
+          ),
+          const SizedBox(height: 24),
+          // Local stats; avg WPM and badges stay placeholders until session
+          // tracking / badges land.
+          Builder(builder: (context) {
+            final stats = ref.watch(readingStatsProvider).valueOrNull;
+            return GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              childAspectRatio: 2.4,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              children: <Widget>[
+                _StatCard(
+                  label: l10n.profileStatsBooksRead,
+                  value: stats?.booksRead.toString() ?? '—',
+                ),
+                _StatCard(
+                  label: l10n.profileStatsCurrentBooks,
+                  value: stats?.currentBooks.toString() ?? '—',
+                ),
+                _StatCard(
+                  label: l10n.profileStatsAvgWpm,
+                  value: stats?.avgWpm?.toString() ?? '—',
+                ),
+                _StatCard(label: l10n.profileStatsBadges, value: '—'),
+              ],
+            );
+          }),
+          const SizedBox(height: 24),
+          _SyncSection(l10n: l10n),
+          const SizedBox(height: 8),
+          ListTile(
+            leading: const Icon(Icons.settings_outlined),
+            title: Text(l10n.settingsTitle),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push(AppRoutes.settings),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () => ref.read(authRepositoryProvider).signOut(),
+            icon: const Icon(Icons.logout),
+            label: Text(l10n.profileSignOut),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -256,8 +262,9 @@ class _SyncSection extends ConsumerWidget {
   String _statusText(SyncUiState state, int pending) {
     return switch (state) {
       SyncRunning() => l10n.syncRunning,
-      SyncSuccess(:final result) =>
-        result.processed == 0 ? l10n.syncUpToDate : l10n.syncSucceeded(result.succeeded),
+      SyncSuccess(:final result) => result.processed == 0
+          ? l10n.syncUpToDate
+          : l10n.syncSucceeded(result.succeeded),
       SyncFailure(:final failure) => failure is UnauthorizedFailure
           ? l10n.syncSignInRequired
           : l10n.syncFailed,

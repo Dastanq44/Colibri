@@ -1,9 +1,10 @@
 # Liquid Glass variant
 
-This branch (`liquid-glass`) reskins the app chrome to a neutral, Apple
-**Liquid Glass**-inspired design: a white / dark-grey monochrome palette with
-frosted, refractive glass surfaces. It is a design variant of the same app —
-all features and logic are identical to `main`.
+This branch (`liquid-glass`) reskins the app chrome to a warm-paper, Apple /
+iOS-styled design: an off-white "paper" palette with a terracotta accent,
+iOS-scale typography and large titles, plus a real native Liquid Glass tab
+bar. It is a design variant of the same app — all features and logic are
+identical to `main`.
 
 ## Official Apple Liquid Glass vs. Flutter (important)
 
@@ -35,13 +36,23 @@ This branch therefore uses **two** layers:
 
 ## What changed (chrome only)
 
-- **Palette** (`lib/app/theme/app_colors.dart`): brand blue replaced by a
-  neutral Apple-grey scale — light `#F2F2F7` / white surfaces, dark
-  `#000`/`#1C1C1E`, graphite accent. Glass takes its colour from content, so
-  the base is monochrome by design.
-- **Theme** (`lib/app/theme/app_theme.dart`): hand-built neutral
-  `ColorScheme`; translucent app bars, rounded (22–28px) translucent cards,
-  sheets, and dialogs; softer buttons.
+The chrome is a warm-paper, Apple-styled skin (an evolution of the earlier
+neutral-grey Liquid Glass base):
+
+- **Palette** (`lib/app/theme/app_colors.dart`): a warm off-white "paper"
+  scale — light background `#EFE7D9` / surfaces `#FFFDF9`, warm ink `#2A2620`
+  — with a single terracotta accent (`#B4703C`, lighter `#E0925C` on dark).
+  A matching warm near-black dark scale (`#16130D` / `#211D16`).
+- **Typography** (`lib/app/theme/app_text_styles.dart`): reshaped to the iOS /
+  SF Pro hierarchy — heavy, slightly tightened large titles down to a calm
+  17pt body.
+- **Large titles** (`lib/app/widgets/large_title_scaffold.dart`): Home and
+  Profile use an iOS large navigation title (big + left-aligned, collapsing to
+  a small toolbar title on scroll).
+- **Theme** (`lib/app/theme/app_theme.dart`): warm `ColorScheme`; flat app
+  bars that blend with the grouped background; borderless rounded (18px) paper
+  cards; filled rounded inputs; tonal quick-action tiles; terracotta switches,
+  progress bars and segmented buttons; no ink ripple (iOS-style taps).
 - **Native tab bar** (`lib/app/router/app_shell.dart`): on iOS the four-tab
   bar is a real native `CNTabBar` (Liquid Glass on iOS 26), driven by SF
   Symbols (`house`, `safari`, `books.vertical`, `person`); its `onTap` bridges
