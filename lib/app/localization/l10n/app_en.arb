@@ -142,7 +142,15 @@
   "settingsHaptics": "Haptic feedback",
   "settingsReducedMotion": "Reduce motion",
   "readerProgressLabel": "Reading progress",
+  "readerPageOf": "page {page} of {total}",
+  "@readerPageOf": {
+    "placeholders": {
+      "page": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
   "fastCurrentSpeedLabel": "Current speed",
+  "fastLockRotationHint": "Lock rotation",
   "settingsProfiles": "Reading profiles",
   "settingsProfilesHint": "One-tap presets — you can fine-tune any setting afterwards.",
   "@settingsProfilesHint": {

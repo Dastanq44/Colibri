@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
@@ -50,6 +51,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   ReaderMode? _pendingMode;
   Timer? _switchTimer;
   Orientation? _lastOrientation;
+
+  /// Direction of the last page turn, for the page-transition animation
+  /// (true = forward/next, false = backward/previous).
+  bool _pageForward = true;
 
   // Reading-session tracking (plan §10.2): one session per continuous
   // stretch in a mode; mode switches roll the session over.
@@ -608,14 +613,31 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
               state: state,
               settings: settings,
               modeLocked: settings.modeLockEnabled,
+              pageForward: _pageForward,
               onToggleModeLock: () => _toggleModeLock(settings.modeLockEnabled),
               onOpenMenu: () => _openReaderMenu(state),
-              onPrevious: ref
-                  .read(readerControllerProvider(widget.bookId).notifier)
-                  .previousPage,
-              onNext: ref
-                  .read(readerControllerProvider(widget.bookId).notifier)
-                  .nextPage,
+              onPrevious: () {
+                setState(() => _pageForward = false);
+                ref
+                    .read(readerControllerProvider(widget.bookId).notifier)
+                    .previousPage();
+              },
+              onNext: () {
+                setState(() => _pageForward = true);
+                ref
+                    .read(readerControllerProvider(widget.bookId).notifier)
+                    .nextPage();
+              },
+              onViewport: (maxWidth, maxHeight, style, scaler) {
+                ref
+                    .read(readerControllerProvider(widget.bookId).notifier)
+                    .applyViewport(
+                      maxWidth: maxWidth,
+                      maxHeight: maxHeight,
+                      style: style,
+                      textScaler: scaler,
+                    );
+              },
             ),
     };
   }
@@ -737,33 +759,67 @@ class _NormalReaderView extends StatelessWidget {
     required this.state,
     required this.settings,
     required this.modeLocked,
+    required this.pageForward,
     required this.onToggleModeLock,
     required this.onOpenMenu,
     required this.onPrevious,
     required this.onNext,
+    required this.onViewport,
   });
+
+  static const EdgeInsets _pagePadding =
+      EdgeInsets.symmetric(horizontal: 24, vertical: 16);
+  static const Duration _turnDuration = Duration(milliseconds: 300);
 
   final AppLocalizations l10n;
   final ReaderReady state;
   final ReaderSettings settings;
   final bool modeLocked;
+  final bool pageForward;
   final VoidCallback onToggleModeLock;
   final VoidCallback onOpenMenu;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
 
+  /// Reports the measured text area + style so the controller can re-paginate
+  /// to fit (see [ReaderController.applyViewport]).
+  final void Function(
+    double maxWidth,
+    double maxHeight,
+    TextStyle style,
+    TextScaler scaler,
+  ) onViewport;
+
   @override
   Widget build(BuildContext context) {
     final palette = ReaderPalette.of(settings.theme);
+    final textStyle = settings.fontFamily.applyTo(TextStyle(
+      fontSize: settings.fontSize.toDouble(),
+      height: settings.lineHeight,
+      letterSpacing: settings.letterSpacing,
+      color: palette.text,
+    ));
+    final animate = settings.pageAnimationEnabled &&
+        !settings.reducedMotion &&
+        !MediaQuery.disableAnimationsOf(context);
+
     return Scaffold(
       backgroundColor: palette.background,
       appBar: AppBar(title: Text(state.document.title)),
       body: Column(
         children: <Widget>[
           Expanded(
-            // One gesture detector pages by tap half; vertical drags scroll.
             child: LayoutBuilder(
               builder: (context, constraints) {
+                // Re-paginate to fill this exact area (after the frame, so we
+                // never mutate state mid-build). No-op when nothing changed.
+                final scaler = MediaQuery.textScalerOf(context);
+                final maxWidth = constraints.maxWidth - _pagePadding.horizontal;
+                final maxHeight = constraints.maxHeight - _pagePadding.vertical;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  onViewport(maxWidth, maxHeight, textStyle, scaler);
+                });
+
                 return Semantics(
                   customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
                     CustomSemanticsAction(label: l10n.readerPreviousPage):
@@ -779,49 +835,33 @@ class _NormalReaderView extends StatelessWidget {
                         onNext();
                       }
                     },
-                    // Subtle slide+fade on page turns; Duration.zero swaps
-                    // instantly when the page-animation setting is off or
-                    // motion is reduced (in-app setting or system-wide).
-                    // Fast mode needs no equivalent gate: it always enters
-                    // paused and has no animated transitions of its own.
-                    child: AnimatedSwitcher(
-                      duration: settings.pageAnimationEnabled &&
-                              !settings.reducedMotion &&
-                              !MediaQuery.disableAnimationsOf(context)
-                          ? AppConstants.pageTurnAnimationDuration
-                          : Duration.zero,
-                      // Default layout centers children at their own height;
-                      // expand keeps every page top-aligned and full-height
-                      // (short last pages would otherwise float mid-screen).
-                      layoutBuilder: (currentChild, previousChildren) => Stack(
-                        fit: StackFit.expand,
-                        children: <Widget>[
-                          ...previousChildren,
-                          if (currentChild != null) currentChild,
-                        ],
+                    // Shared-axis (horizontal) page turn: the old page fades
+                    // and slides off, the new one fades and slides in from the
+                    // turn direction. Instant when animation is off/reduced.
+                    child: PageTransitionSwitcher(
+                      duration: animate ? _turnDuration : Duration.zero,
+                      reverse: !pageForward,
+                      transitionBuilder: (child, primary, secondary) =>
+                          SharedAxisTransition(
+                        animation: primary,
+                        secondaryAnimation: secondary,
+                        transitionType: SharedAxisTransitionType.horizontal,
+                        fillColor: palette.background,
+                        child: child,
                       ),
-                      transitionBuilder: (child, animation) => FadeTransition(
-                        opacity: animation,
-                        child: SlideTransition(
-                          position: Tween<Offset>(
-                            begin: const Offset(0.04, 0),
-                            end: Offset.zero,
-                          ).animate(animation),
-                          child: child,
-                        ),
-                      ),
-                      child: SingleChildScrollView(
+                      child: KeyedSubtree(
                         key: ValueKey<int>(state.pageIndex),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 24, vertical: 16),
-                        child: Text(
-                          state.currentPage.text.trim(),
-                          style: settings.fontFamily.applyTo(TextStyle(
-                            fontSize: settings.fontSize.toDouble(),
-                            height: settings.lineHeight,
-                            letterSpacing: settings.letterSpacing,
-                            color: palette.text,
-                          )),
+                        // Fitted page fills the area without scrolling; ClipRect
+                        // guards the one transient frame before the first fit.
+                        child: ClipRect(
+                          child: Padding(
+                            padding: _pagePadding,
+                            child: Align(
+                              alignment: Alignment.topLeft,
+                              child: Text(state.currentPage.text,
+                                  style: textStyle),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -877,15 +917,25 @@ class _NormalBottomBar extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   LinearProgressIndicator(
+                    // Value must stay a plain number for the platform a11y
+                    // progress role (iOS rejects compound strings).
                     value: (progress.percent / 100).clamp(0.0, 1.0),
                     semanticsLabel: l10n.readerProgressLabel,
                     semanticsValue: '${progress.percent.round()}%',
                   ),
                   const SizedBox(height: 4),
-                  // The indicator above already announces the percent.
-                  ExcludeSemantics(
-                    child: Text('${progress.percent.round()}%',
-                        style: theme.textTheme.bodySmall),
+                  // Page count carries its own clean a11y label; the raw
+                  // "%  ·  n / m" string is excluded to avoid double reads.
+                  Semantics(
+                    label: l10n.readerPageOf(
+                        progress.pageIndex + 1, progress.pageCount),
+                    child: ExcludeSemantics(
+                      child: Text(
+                        '${progress.percent.round()}%   ·   '
+                        '${progress.pageIndex + 1} / ${progress.pageCount}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
                   ),
                 ],
               ),

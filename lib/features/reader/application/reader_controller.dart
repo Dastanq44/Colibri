@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/errors/failures.dart';
@@ -114,6 +115,12 @@ class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
         if (await repo.getSavedLocator(arg)
             case Ok(value: final ReaderLocator loc)) {
           index = _resolveIndex(pages, loc);
+          // Keep the exact saved offset so the first fit-pagination anchors on
+          // it precisely, rather than on the placeholder page's start (which
+          // would round the position back to that page's beginning).
+          if (ReaderLocatorTypes.isOffset(loc.locatorType)) {
+            _pendingAnchorOffset = int.tryParse(loc.locatorValue);
+          }
         }
         state = ReaderReady(
           document: doc,
@@ -198,6 +205,54 @@ class ReaderController extends AutoDisposeFamilyNotifier<ReaderState, String> {
 
   /// Jumps to a table-of-contents entry's chapter and saves progress.
   void jumpToChapter(TocEntry entry) => jumpToOffset(entry.startOffset);
+
+  String? _viewportKey;
+
+  /// Exact reading offset to anchor the first fit-pagination on (from a
+  /// resumed locator); consumed on the first [applyViewport].
+  int? _pendingAnchorOffset;
+
+  /// Re-paginates so each page fills the given text area without overflow
+  /// (called by the reader view with its measured size + current font style).
+  /// Idempotent per (size, style) — a no-op when nothing changed. Keeps the
+  /// reading position by re-anchoring on the current page's start offset;
+  /// does not persist (the saved offset is unchanged).
+  void applyViewport({
+    required double maxWidth,
+    required double maxHeight,
+    required TextStyle style,
+    required TextScaler textScaler,
+  }) {
+    final s = state;
+    if (s is! ReaderReady) return;
+    if (maxWidth < 40 || maxHeight < 40) return; // degenerate/transient size
+    final key = '${maxWidth.round()}x${maxHeight.round()}'
+        '|${style.fontSize}|${style.height}|${style.letterSpacing}'
+        '|${style.fontFamily}|${textScaler.scale(100).round()}';
+    if (key == _viewportKey) return;
+
+    final anchor = _pendingAnchorOffset ?? s.currentPage.startOffset;
+    _pendingAnchorOffset = null;
+    final pages = ref.read(textPaginationServiceProvider).paginateToFit(
+          s.document.fullText,
+          maxWidth: maxWidth,
+          maxHeight: maxHeight,
+          style: style,
+          textScaler: textScaler,
+        );
+    if (pages.isEmpty) return;
+    _viewportKey = key;
+    var index = pages.indexWhere(
+      (p) => anchor >= p.startOffset && anchor < p.endOffset,
+    );
+    if (index < 0) index = 0;
+    state = ReaderReady(
+      document: s.document,
+      pages: pages,
+      pageIndex: index,
+      toc: s.toc,
+    );
+  }
 
   /// Persists PDF progress by 1-based page number (TASK-0704). Percent
   /// mirrors the text reader's convention: the last page reads 100%.

@@ -51,6 +51,7 @@ dependencies:
   sentry_flutter: ^9.23.0
   pdfrx: ^2.4.4
   amplitude_flutter: ^4.6.1
+  animations: ^2.2.0
 
   # Analytics SDK (Firebase Analytics or Amplitude) is added in Phase 15.
   # The AnalyticsRepository interface + a no-op default already exist so call

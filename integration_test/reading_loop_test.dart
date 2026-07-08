@@ -78,13 +78,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('word0'), findsOneWidget); // page 1 visible
 
-    // --- Page forward (right-half tap). ---
-    await tester.tapAt(Offset(portrait.width * 0.8, 400));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('word0 '), findsNothing); // page 2 now
+    // --- Page forward several times (advance well past the first page). ---
+    for (var i = 0; i < 6; i++) {
+      await tester.tapAt(Offset(portrait.width * 0.8, 400));
+      await tester.pumpAndSettle();
+    }
+    expect(find.textContaining('word0 '), findsNothing); // moved off page 1
     final afterPage = await db.progressDao.getByBookId('itest-book');
     expect(afterPage, isNotNull);
-    expect(afterPage!.pageNumber, 1); // saved on page turn
+    expect(afterPage!.pageNumber, greaterThan(0)); // advanced + saved
+    final advancedPercent = afterPage.percent;
+    expect(advancedPercent, greaterThan(0));
 
     // --- Rotate to landscape → fast mode (after stability threshold). ---
     tester.view.physicalSize = landscape;
@@ -100,6 +104,8 @@ void main() {
     expect(find.text('300 WPM'), findsOneWidget);
     // Transient +25 feedback clears on its own.
     await tester.pump(const Duration(milliseconds: 800));
+    // TEMP: hold the fast-mode screen for an external screenshot.
+    await tester.pump(const Duration(seconds: 5));
 
     // --- Rotate back to portrait → normal reader, position kept. ---
     tester.view.physicalSize = portrait;
@@ -117,7 +123,7 @@ void main() {
     expect(saved!.percent, greaterThan(0));
     expect((await db.settingsDao.getFastSettings()).defaultWpm, 300);
 
-    // --- Reopen: resumes at the saved page, not page 1. ---
+    // --- Reopen: resumes near the saved offset, not back at page 1. ---
     await tester.tap(find.text('Loop Test Book'));
     await tester.pumpAndSettle();
     expect(find.textContaining('word0 '), findsNothing);

@@ -216,10 +216,24 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
                       ),
                       Positioned.fill(
                         child: IgnorePointer(
-                          child: _TokenColumn(
+                          child: _WordRow(
                             state: s,
                             palette: palette,
                             fontFamily: fontFamily,
+                          ),
+                        ),
+                      ),
+                      // Fading hints (visible while paused): what each tap
+                      // zone does, and the rotation-lock affordance.
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: _FastTapHints(
+                            paused: !s.isPlaying,
+                            step: s.settings.step,
+                            speedLocked: s.settings.speedLockEnabled,
+                            reduced: readerSettings?.reducedMotion ?? false,
+                            l10n: l10n,
+                            palette: palette,
                           ),
                         ),
                       ),
@@ -252,8 +266,11 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
   }
 }
 
-class _TokenColumn extends StatelessWidget {
-  const _TokenColumn({
+/// RSVP words laid out horizontally: previous (dim) on the left, current
+/// (large) pinned to the centre, next (dim) on the right. The two side cells
+/// are equal-width so the current word's centre stays fixed as it changes.
+class _WordRow extends StatelessWidget {
+  const _WordRow({
     required this.state,
     required this.palette,
     required this.fontFamily,
@@ -265,34 +282,136 @@ class _TokenColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final dim = fontFamily.applyTo(
-      (theme.textTheme.titleMedium ?? const TextStyle())
-          .copyWith(color: palette.dim),
-    );
-    final word = fontFamily.applyTo(
-      (theme.textTheme.displaySmall ?? const TextStyle())
-          .copyWith(fontWeight: FontWeight.w600, color: palette.text),
-    );
+    final side = fontFamily.applyTo(TextStyle(
+      fontSize: 30,
+      color: palette.dim,
+    ));
+    final current = fontFamily.applyTo(TextStyle(
+      fontSize: 60,
+      fontWeight: FontWeight.w600,
+      color: palette.text,
+    ));
     final showAdjacent = state.settings.showAdjacentContext;
+
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: showAdjacent
+                    ? Text(state.previousToken?.rawText ?? '',
+                        style: side,
+                        maxLines: 1,
+                        textAlign: TextAlign.right,
+                        overflow: TextOverflow.ellipsis)
+                    : const SizedBox.shrink(),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(state.currentToken?.rawText ?? '',
+                    style: current, maxLines: 1),
+              ),
+            ),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: showAdjacent
+                    ? Text(state.nextToken?.rawText ?? '',
+                        style: side,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis)
+                    : const SizedBox.shrink(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Gray tap-affordance hints shown while fast mode is paused (e.g. right after
+/// entering it), fading out once reading resumes.
+class _FastTapHints extends StatelessWidget {
+  const _FastTapHints({
+    required this.paused,
+    required this.step,
+    required this.speedLocked,
+    required this.reduced,
+    required this.l10n,
+    required this.palette,
+  });
+
+  final bool paused;
+  final int step;
+  final bool speedLocked;
+  final bool reduced;
+  final AppLocalizations l10n;
+  final ReaderPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final duration =
+        reduced ? Duration.zero : const Duration(milliseconds: 300);
+    final labelStyle = TextStyle(
+      color: palette.dim,
+      fontSize: 15,
+      fontWeight: FontWeight.w500,
+    );
+    Widget fade(Widget child) =>
+        AnimatedOpacity(opacity: paused ? 1 : 0, duration: duration, child: child);
+
+    // Hints sit in the corners so they never collide with the centred word
+    // row: slower on the left, faster on the right, rotation lock by the
+    // lock icon (bottom-left).
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Stack(
         children: <Widget>[
-          if (showAdjacent)
-            Text(state.previousToken?.rawText ?? '', style: dim),
-          const SizedBox(height: 12),
-          Text(
-            state.currentToken?.rawText ?? '',
-            textAlign: TextAlign.center,
-            style: word,
+          if (!speedLocked) ...<Widget>[
+            Align(
+              alignment: Alignment.topLeft,
+              child: fade(_hint(
+                  Icons.remove, '-$step ${l10n.wpm}', labelStyle, palette.dim)),
+            ),
+            Align(
+              alignment: Alignment.topRight,
+              child: fade(_hint(
+                  Icons.add, '+$step ${l10n.wpm}', labelStyle, palette.dim)),
+            ),
+          ],
+          Align(
+            alignment: Alignment.bottomLeft,
+            child: fade(Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(Icons.screen_lock_rotation, size: 16, color: palette.dim),
+                const SizedBox(width: 6),
+                Text(l10n.fastLockRotationHint, style: labelStyle),
+              ],
+            )),
           ),
-          const SizedBox(height: 12),
-          if (showAdjacent) Text(state.nextToken?.rawText ?? '', style: dim),
         ],
       ),
     );
   }
+
+  Widget _hint(IconData icon, String text, TextStyle style, Color color) =>
+      Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 4),
+          Text(text, style: style),
+        ],
+      );
 }
 
 class _FeedbackChip extends StatelessWidget {
