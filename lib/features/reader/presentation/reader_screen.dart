@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
+import 'package:flutter/services.dart'
+    show HapticFeedback, SystemUiOverlayStyle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
@@ -822,9 +823,24 @@ class _NormalReaderView extends StatelessWidget {
         !settings.reducedMotion &&
         !MediaQuery.disableAnimationsOf(context);
 
+    // Chrome (app bar + bottom bar) follows the chosen reading theme so the
+    // whole screen changes together instead of a default-theme frame around a
+    // themed page.
+    final barBrightness =
+        ThemeData.estimateBrightnessForColor(palette.background);
     return Scaffold(
       backgroundColor: palette.background,
-      appBar: AppBar(title: Text(state.document.title)),
+      appBar: AppBar(
+        backgroundColor: palette.background,
+        foregroundColor: palette.text,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        systemOverlayStyle: barBrightness == Brightness.dark
+            ? SystemUiOverlayStyle.light
+            : SystemUiOverlayStyle.dark,
+        title: Text(state.document.title),
+      ),
       body: Column(
         children: <Widget>[
           Expanded(
@@ -900,6 +916,7 @@ class _NormalReaderView extends StatelessWidget {
           _NormalBottomBar(
             l10n: l10n,
             progress: state.progress,
+            palette: palette,
             modeLocked: modeLocked,
             onToggleModeLock: onToggleModeLock,
             onOpenMenu: onOpenMenu,
@@ -914,6 +931,7 @@ class _NormalBottomBar extends StatelessWidget {
   const _NormalBottomBar({
     required this.l10n,
     required this.progress,
+    required this.palette,
     required this.modeLocked,
     required this.onToggleModeLock,
     required this.onOpenMenu,
@@ -921,6 +939,7 @@ class _NormalBottomBar extends StatelessWidget {
 
   final AppLocalizations l10n;
   final ReaderProgress progress;
+  final ReaderPalette palette;
   final bool modeLocked;
   final VoidCallback onToggleModeLock;
   final VoidCallback onOpenMenu;
@@ -936,6 +955,7 @@ class _NormalBottomBar extends StatelessWidget {
           children: <Widget>[
             IconButton(
               tooltip: l10n.readerModeLock,
+              color: palette.text,
               icon: Icon(modeLocked ? Icons.lock : Icons.lock_open_outlined),
               onPressed: onToggleModeLock,
             ),
@@ -947,6 +967,8 @@ class _NormalBottomBar extends StatelessWidget {
                     // Value must stay a plain number for the platform a11y
                     // progress role (iOS rejects compound strings).
                     value: (progress.percent / 100).clamp(0.0, 1.0),
+                    color: palette.accent,
+                    backgroundColor: palette.dim.withValues(alpha: 0.24),
                     semanticsLabel: l10n.readerProgressLabel,
                     semanticsValue: '${progress.percent.round()}%',
                   ),
@@ -960,7 +982,8 @@ class _NormalBottomBar extends StatelessWidget {
                       child: Text(
                         '${progress.percent.round()}%   ·   '
                         '${progress.pageIndex + 1} / ${progress.pageCount}',
-                        style: theme.textTheme.bodySmall,
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: palette.dim),
                       ),
                     ),
                   ),
@@ -969,6 +992,7 @@ class _NormalBottomBar extends StatelessWidget {
             ),
             IconButton(
               tooltip: l10n.readerMenu,
+              color: palette.text,
               icon: const Icon(Icons.more_vert),
               onPressed: onOpenMenu,
             ),
