@@ -95,6 +95,7 @@
   "removeBookTitle": "Удалить книгу?",
   "removeBookBody": "Это удалит локальный файл и прогресс чтения с этого устройства.",
   "dialogCancel": "Отмена",
+  "dialogClose": "Закрыть",
   "wpm": "слов/мин",
   "fastPlay": "Играть",
   "fastPause": "Пауза",

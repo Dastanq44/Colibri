@@ -105,6 +105,55 @@ void main() {
     expect(result.chapters[1].text.contains('Second chapter'), isTrue);
   });
 
+  group('source line wrapping', () {
+    String extract(String bodyHtml) {
+      final bytes = _zip(<String, String>{
+        'META-INF/container.xml': _containerXml,
+        'OEBPS/content.opf': _opfWithHref('chapter1.xhtml'),
+        'OEBPS/chapter1.xhtml': '<html><body>$bodyHtml</body></html>',
+      });
+      final result = extractor.extract(bytes);
+      expect(result, isNotNull);
+      expect(result!.chapters, isNotEmpty);
+      return result.chapters.first.text;
+    }
+
+    test('hard-wrapped paragraph collapses to one flowing line', () {
+      // A single <p> whose text is wrapped across source lines (as most EPUBs
+      // ship) must not keep those newlines as hard breaks.
+      final text = extract('<p>The quick brown fox jumped over the lazy dog\n'
+          'and then continued on its way through the forest\n'
+          'until it reached the river.</p>');
+      expect(text, 'The quick brown fox jumped over the lazy dog and then '
+          'continued on its way through the forest until it reached the '
+          'river.');
+      expect(text.contains('\n'), isFalse);
+    });
+
+    test('paragraph breaks survive as a blank line between paragraphs', () {
+      final text = extract('<p>First paragraph line one\nline two.</p>'
+          '<p>Second paragraph\nhere.</p>');
+      expect(text, 'First paragraph line one line two.\n\n'
+          'Second paragraph here.');
+    });
+
+    test('<br> stays a single line break inside a paragraph', () {
+      final text = extract('<p>Line one<br/>Line two</p>');
+      expect(text, 'Line one\nLine two');
+    });
+
+    test('leading source indentation is not rendered as text', () {
+      final text =
+          extract('<p>\n    Indented source,\n    still one line.\n</p>');
+      expect(text, 'Indented source, still one line.');
+    });
+
+    test('<pre> keeps its significant newlines', () {
+      final text = extract('<pre>line one\nline two\nline three</pre>');
+      expect(text.contains('line one\nline two'), isTrue);
+    });
+  });
+
   test('metadata falls back to null when absent', () {
     final bytes = _zip(<String, String>{
       'META-INF/container.xml': _containerXml,

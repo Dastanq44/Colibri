@@ -380,6 +380,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
         await showModalBottomSheet<void>(
           context: context,
           isScrollControlled: true,
+          showDragHandle: true,
           builder: (_) => const ReaderSettingsSheet(),
         );
     }
