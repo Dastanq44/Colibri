@@ -272,6 +272,8 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
                               fontFamily: fontFamily,
                               scale: scale,
                               scrubbing: _scrubbing,
+                              reduced:
+                                  readerSettings?.reducedMotion ?? false,
                             ),
                           ),
                         ),
@@ -343,12 +345,16 @@ class _WordRow extends StatelessWidget {
     required this.fontFamily,
     required this.scale,
     required this.scrubbing,
+    required this.reduced,
   });
 
   final FastModeState state;
   final ReaderPalette palette;
   final ReaderFontFamily fontFamily;
   final double scale;
+
+  /// Honours the reduced-motion setting (disables the grow-in animation).
+  final bool reduced;
 
   /// Hold-and-drag scrubbing: no border at all — words span the full screen
   /// and an edge-crossing word stays visible (clipped), never hidden.
@@ -456,10 +462,27 @@ class _WordRow extends StatelessWidget {
               bottom: bottom,
               width: centreW,
               height: centreH,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(currentText,
-                    style: currentStyle, maxLines: 1, softWrap: false),
+              // Grow-in: the word starts at the side-word scale and eases up
+              // to full size, so the incoming word visibly "becomes" the
+              // highlighted one instead of snapping. Keyed per token so the
+              // animation restarts on every advance.
+              child: TweenAnimationBuilder<double>(
+                key: ValueKey<int>(state.currentTokenIndex),
+                tween: Tween<double>(begin: reduced ? 1.0 : 26 / 58, end: 1),
+                duration: reduced
+                    ? Duration.zero
+                    : const Duration(milliseconds: 140),
+                curve: Curves.easeOutCubic,
+                builder: (context, grow, child) => Transform.scale(
+                  scale: grow,
+                  alignment: Alignment.bottomCenter,
+                  child: child,
+                ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(currentText,
+                      style: currentStyle, maxLines: 1, softWrap: false),
+                ),
               ),
             ));
           }
@@ -478,9 +501,11 @@ class _WordRow extends StatelessWidget {
                   // No hide-barrier: stop only once fully offscreen; a word
                   // crossing the screen edge still shows its visible part (cut).
                   if (inner >= maxW / 2) break;
-                } else {
-                  // Show when the word's midpoint is inside the border; the first
-                  // one that isn't ends this side (outer words are further still).
+                } else if (step > 1) {
+                  // Show when the word's midpoint is inside the border; the
+                  // first one that isn't ends this side (outer words are
+                  // further still). The nearest word (step 1) is exempt —
+                  // there is always at least one word on each side.
                   if (inner + w / 2 > bandHalf) break;
                 }
                 children.add(Positioned(
