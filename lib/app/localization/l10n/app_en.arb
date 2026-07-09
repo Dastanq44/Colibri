@@ -167,6 +167,7 @@
   },
   "fastCurrentSpeedLabel": "Current speed",
   "fastLockRotationHint": "Lock rotation",
+  "settingsExample": "Example",
   "settingsPresets": "Presets",
   "presetName": "Profile {letter}",
   "@presetName": {"placeholders": {"letter": {"type": "String"}}},

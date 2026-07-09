@@ -93,8 +93,8 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
     }
     if (engine.decreaseWpm()) {
       _haptic(HapticFeedback.selectionClick);
-      unawaited(ref.read(analyticsRepositoryProvider).logEvent(
-          'wpm_changed', params: {'wpm': engine.state.wpm, 'delta': -1}));
+      unawaited(ref.read(analyticsRepositoryProvider).logEvent('wpm_changed',
+          params: {'wpm': engine.state.wpm, 'delta': -1}));
       _flash('-${engine.state.settings.step} ${l10n.wpm}');
     }
   }
@@ -106,8 +106,8 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
     }
     if (engine.increaseWpm()) {
       _haptic(HapticFeedback.selectionClick);
-      unawaited(ref.read(analyticsRepositoryProvider).logEvent(
-          'wpm_changed', params: {'wpm': engine.state.wpm, 'delta': 1}));
+      unawaited(ref.read(analyticsRepositoryProvider).logEvent('wpm_changed',
+          params: {'wpm': engine.state.wpm, 'delta': 1}));
       _flash('+${engine.state.settings.step} ${l10n.wpm}');
     }
   }
@@ -115,7 +115,8 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
   void _toggle(FastModeEngine engine, AppLocalizations l10n) {
     engine.togglePlayPause();
     unawaited(ref.read(analyticsRepositoryProvider).logEvent(
-        'pause_play_toggled', params: {'playing': engine.state.isPlaying}));
+        'pause_play_toggled',
+        params: {'playing': engine.state.isPlaying}));
     if (!engine.state.isPlaying) _flash(l10n.fastPaused);
   }
 
@@ -200,10 +201,9 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
                       _haptic(HapticFeedback.selectionClick);
                     },
                     onLongPressEnd: (_) => setState(() => _scrubbing = false),
-                    onLongPressCancel: () =>
-                        setState(() => _scrubbing = false),
-                    onScaleStart: (_) =>
-                        _pinchBase = ref.read(fastWordScaleProvider).valueOrNull,
+                    onLongPressCancel: () => setState(() => _scrubbing = false),
+                    onScaleStart: (_) => _pinchBase =
+                        ref.read(fastWordScaleProvider).valueOrNull,
                     onScaleUpdate: (d) {
                       // Accept multi-touch pinch (pointerCount >= 2) and
                       // trackpad pinch (reported as pointerCount 0); ignore a
@@ -239,8 +239,9 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
                               ),
                               Expanded(
                                 child: Semantics(
-                                  label:
-                                      s.isPlaying ? l10n.fastPause : l10n.fastPlay,
+                                  label: s.isPlaying
+                                      ? l10n.fastPause
+                                      : l10n.fastPlay,
                                   button: true,
                                   child: GestureDetector(
                                     behavior: HitTestBehavior.opaque,
@@ -358,7 +359,7 @@ class _WordRow extends StatelessWidget {
   /// noise around the highlighted word aids concentration. Paused mode still
   /// spans the whole screen.
   static const double _playingBandFactor = 0.6;
-  static const int _maxWordsPerSide = 8;
+  static const int _maxWordsPerSide = 32;
 
   /// Edge punctuation (quotes, commas, dots, brackets...) is kept visible but
   /// ignored when centring the current word, so the *letters* sit centred.
@@ -368,11 +369,6 @@ class _WordRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textScaler = MediaQuery.textScalerOf(context);
-    final sideStyle = fontFamily.applyTo(TextStyle(
-      fontSize: 26 * scale,
-      color: palette.dim,
-      height: 1.0,
-    ));
     final currentStyle = fontFamily.applyTo(TextStyle(
       fontSize: 58 * scale,
       fontWeight: FontWeight.w600,
@@ -392,98 +388,118 @@ class _WordRow extends StatelessWidget {
       return painter.size;
     }
 
-    return LayoutBuilder(builder: (context, constraints) {
-      final maxW = constraints.maxWidth;
-      final maxH = constraints.maxHeight;
-      final centreX = maxW / 2;
-      final gap = 16 * scale;
-
-      // Current word: shrink to its 0.46-width box if it would overflow.
-      final currentText = state.currentToken?.rawText ?? '';
-      final rawCurrent =
-          currentText.isEmpty ? Size.zero : measure(currentText, currentStyle);
-      final centreMaxW = maxW * 0.46;
-      final fit = (rawCurrent.width > centreMaxW && rawCurrent.width > 0)
-          ? centreMaxW / rawCurrent.width
-          : 1.0;
-      final centreW = rawCurrent.width * fit;
-      final centreH = rawCurrent.height * fit;
-
-      // Centre on the word's *letters*: leading/trailing punctuation (quotes,
-      // commas, dots) stays rendered but does not shift the anchor.
-      var anchorHalf = centreW / 2;
-      if (currentText.isNotEmpty) {
-        final m = _edges.firstMatch(currentText);
-        final prefix = m?.group(1) ?? '';
-        final core = m?.group(2) ?? '';
-        if (core.isNotEmpty && (prefix.isNotEmpty || (m?.group(3) ?? '').isNotEmpty)) {
-          final prefixW =
-              prefix.isEmpty ? 0.0 : measure(prefix, currentStyle).width;
-          final coreW = measure(prefix + core, currentStyle).width - prefixW;
-          anchorHalf = fit * (prefixW + coreW / 2);
-        }
-      }
-      final leftHalf = anchorHalf; // word extent left of the screen centre
-      final rightHalf = centreW - anchorHalf; // ...and right of it
-
-      // The border, measured from the centre: an inset band while playing, the
-      // screen edge while paused; none at all while scrubbing.
-      final bandHalf = playing ? (maxW / 2) * _playingBandFactor : maxW / 2;
-
-      // Floor-align every word (shared bottom) with the row vertically centred.
-      final sideH = measure('Ag', sideStyle).height;
-      final rowH = centreH > sideH ? centreH : sideH;
-      final bottom = (maxH - rowH) / 2;
-
-      final children = <Widget>[];
-      if (currentText.isNotEmpty) {
-        children.add(Positioned(
-          left: centreX - leftHalf,
-          bottom: bottom,
-          width: centreW,
-          height: centreH,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(currentText,
-                style: currentStyle, maxLines: 1, softWrap: false),
-          ),
+    // Scrub emphasis eases in/out: side words grow and gain contrast while
+    // the reader drags through the text.
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(end: scrubbing ? 1 : 0),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+      builder: (context, scrubT, _) {
+        final sideStyle = fontFamily.applyTo(TextStyle(
+          fontSize: (26 + 6 * scrubT) * scale,
+          color: Color.lerp(palette.dim, palette.text, 0.55 * scrubT),
+          height: 1.0,
         ));
-      }
+        return LayoutBuilder(builder: (context, constraints) {
+          final maxW = constraints.maxWidth;
+          final maxH = constraints.maxHeight;
+          final centreX = maxW / 2;
+          final gap = 16 * scale;
 
-      if (showAdjacent && currentText.isNotEmpty) {
-        for (final dir in const <int>[-1, 1]) {
-          // Distance from the centre to this word's near (inner) edge, which
-          // starts at the current word's actual edge on this side.
-          var inner = (dir < 0 ? leftHalf : rightHalf) + gap;
-          for (var step = 1; step <= _maxWordsPerSide; step++) {
-            final text = state.tokenAt(dir * step)?.rawText;
-            if (text == null || text.isEmpty) break;
-            final w = measure(text, sideStyle).width;
-            if (w <= 0) break;
-            if (scrubbing) {
-              // No border: stop only once fully offscreen; a word crossing
-              // the screen edge still shows its visible part.
-              if (inner >= maxW / 2) break;
-            } else {
-              // Show when the word's midpoint is inside the border; the first
-              // one that isn't ends this side (outer words are further still).
-              if (inner + w / 2 > bandHalf) break;
+          // Current word: shrink to its 0.46-width box if it would overflow.
+          final currentText = state.currentToken?.rawText ?? '';
+          final rawCurrent = currentText.isEmpty
+              ? Size.zero
+              : measure(currentText, currentStyle);
+          final centreMaxW = maxW * 0.46;
+          final fit = (rawCurrent.width > centreMaxW && rawCurrent.width > 0)
+              ? centreMaxW / rawCurrent.width
+              : 1.0;
+          final centreW = rawCurrent.width * fit;
+          final centreH = rawCurrent.height * fit;
+
+          // Centre on the word's *letters*: leading/trailing punctuation (quotes,
+          // commas, dots) stays rendered but does not shift the anchor.
+          var anchorHalf = centreW / 2;
+          if (currentText.isNotEmpty) {
+            final m = _edges.firstMatch(currentText);
+            final prefix = m?.group(1) ?? '';
+            final core = m?.group(2) ?? '';
+            if (core.isNotEmpty &&
+                (prefix.isNotEmpty || (m?.group(3) ?? '').isNotEmpty)) {
+              final prefixW =
+                  prefix.isEmpty ? 0.0 : measure(prefix, currentStyle).width;
+              final coreW =
+                  measure(prefix + core, currentStyle).width - prefixW;
+              anchorHalf = fit * (prefixW + coreW / 2);
             }
-            children.add(Positioned(
-              left: dir < 0 ? centreX - inner - w : centreX + inner,
-              bottom: bottom,
-              child: Text(text,
-                  style: sideStyle, maxLines: 1, softWrap: false),
-            ));
-            inner += w + gap;
           }
-        }
-      }
+          final leftHalf = anchorHalf; // word extent left of the screen centre
+          final rightHalf = centreW - anchorHalf; // ...and right of it
 
-      // Clip so words that cross the screen edge show only their
-      // on-screen part.
-      return ClipRect(child: Stack(children: children));
-    });
+          // The border, measured from the centre: an inset band while playing
+          // (midpoint rule). Paused and scrubbing have NO hide-barrier — words
+          // are placed until fully offscreen and the ClipRect cuts the crossing
+          // word at the screen edge.
+          final bandHalf = (maxW / 2) * _playingBandFactor;
+          final unbounded = scrubbing || !playing;
+
+          // Floor-align every word (shared bottom) with the row vertically centred.
+          final sideH = measure('Ag', sideStyle).height;
+          final rowH = centreH > sideH ? centreH : sideH;
+          final bottom = (maxH - rowH) / 2;
+
+          final children = <Widget>[];
+          if (currentText.isNotEmpty) {
+            children.add(Positioned(
+              left: centreX - leftHalf,
+              bottom: bottom,
+              width: centreW,
+              height: centreH,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(currentText,
+                    style: currentStyle, maxLines: 1, softWrap: false),
+              ),
+            ));
+          }
+
+          if (showAdjacent && currentText.isNotEmpty) {
+            for (final dir in const <int>[-1, 1]) {
+              // Distance from the centre to this word's near (inner) edge, which
+              // starts at the current word's actual edge on this side.
+              var inner = (dir < 0 ? leftHalf : rightHalf) + gap;
+              for (var step = 1; step <= _maxWordsPerSide; step++) {
+                final text = state.tokenAt(dir * step)?.rawText;
+                if (text == null || text.isEmpty) break;
+                final w = measure(text, sideStyle).width;
+                if (w <= 0) break;
+                if (unbounded) {
+                  // No hide-barrier: stop only once fully offscreen; a word
+                  // crossing the screen edge still shows its visible part (cut).
+                  if (inner >= maxW / 2) break;
+                } else {
+                  // Show when the word's midpoint is inside the border; the first
+                  // one that isn't ends this side (outer words are further still).
+                  if (inner + w / 2 > bandHalf) break;
+                }
+                children.add(Positioned(
+                  left: dir < 0 ? centreX - inner - w : centreX + inner,
+                  bottom: bottom,
+                  child: Text(text,
+                      style: sideStyle, maxLines: 1, softWrap: false),
+                ));
+                inner += w + gap;
+              }
+            }
+          }
+
+          // Clip so words that cross the screen edge show only their
+          // on-screen part.
+          return ClipRect(child: Stack(children: children));
+        });
+      },
+    );
   }
 }
 
@@ -516,8 +532,8 @@ class _WpmHints extends StatelessWidget {
       fontSize: 19,
       fontWeight: FontWeight.w500,
     );
-    Widget fade(Widget child) =>
-        AnimatedOpacity(opacity: paused ? 1 : 0, duration: duration, child: child);
+    Widget fade(Widget child) => AnimatedOpacity(
+        opacity: paused ? 1 : 0, duration: duration, child: child);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -545,16 +561,17 @@ class _FeedbackChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Inverse of the reading palette so the chip follows the chosen theme.
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: palette.text.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Semantics(
-        liveRegion: true,
-        child: Text(text, style: TextStyle(color: palette.background)),
+    // Plain text, identical in size/colour to the ±WPM hints — no chip
+    // background.
+    return Semantics(
+      liveRegion: true,
+      child: Text(
+        text,
+        style: TextStyle(
+          color: palette.dim,
+          fontSize: 19,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }
@@ -635,7 +652,7 @@ class _FastBottomBar extends StatelessWidget {
                       opacity: paused ? 1 : 0,
                       duration: duration,
                       child: Text(
-                        l10n.fastLockRotationHint,
+                        l10n.readerModeLock,
                         style: theme.textTheme.bodyMedium
                             ?.copyWith(color: palette.dim),
                       ),

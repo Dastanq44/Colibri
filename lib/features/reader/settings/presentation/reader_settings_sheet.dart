@@ -29,200 +29,217 @@ class ReaderSettingsSheet extends ConsumerWidget {
     final label = TextStyle(color: palette.text);
     final body = TextStyle(color: palette.text, fontSize: 15);
 
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          // Pinned header so the close button stays reachable no matter how far
-          // the (tall, scroll-controlled) settings list is scrolled.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    l10n.readerSettingsTitle,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(color: palette.text),
-                  ),
+    // Material (not a plain Container): ListTiles paint their ink on the
+    // nearest Material, and it repaints live when the theme changes.
+    return Material(
+      color: palette.background,
+      clipBehavior: Clip.antiAlias,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            // Hand-drawn drag handle (the sheet paints its own background so
+            // theme changes repaint live; the stock handle belongs to the host).
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: palette.dim.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                IconButton(
-                  tooltip: l10n.dialogClose,
-                  color: palette.text,
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.of(context).maybePop(),
-                ),
-              ],
+              ),
             ),
-          ),
-          Flexible(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+            // Pinned header so the close button stays reachable no matter how far
+            // the (tall, scroll-controlled) settings list is scrolled.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+              child: Row(
                 children: <Widget>[
-                  Text(l10n.settingsPresets, style: label),
-                  const SizedBox(height: 8),
-                  _PresetsSection(
-                      l10n: l10n, settings: settings, palette: palette),
-                  const SizedBox(height: 16),
-                  Text(l10n.settingsTheme, style: label),
-                  const SizedBox(height: 8),
-                  _SlidingSegments<ReaderThemeVariant>(
-                    palette: palette,
-                    groupValue: settings.theme,
-                    onChanged: repo.setTheme,
-                    options: <ReaderThemeVariant, String>{
-                      ReaderThemeVariant.light: l10n.themeLight,
-                      ReaderThemeVariant.sepia: l10n.themeSepia,
-                      ReaderThemeVariant.dark: l10n.themeDark,
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  // Live sample so theme/font/size/spacing changes are seen.
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: palette.dim.withValues(alpha: 0.45),
-                      ),
-                    ),
+                  Expanded(
                     child: Text(
-                      "Great holes secretly are digged where earth's pores "
-                      'ought to suffice, and things have learnt to walk that '
-                      'ought to crawl.',
-                      style: settings.fontFamily.applyTo(TextStyle(
-                        fontSize: settings.fontSize.toDouble(),
-                        height: settings.lineHeight,
-                        letterSpacing: settings.letterSpacing,
-                        color: palette.text,
-                      )),
+                      l10n.readerSettingsTitle,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(color: palette.text),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Text(l10n.settingsFontFamily, style: label),
-                  const SizedBox(height: 8),
-                  _SlidingSegments<ReaderFontFamily>(
-                    palette: palette,
-                    groupValue: settings.fontFamily,
-                    onChanged: repo.setFontFamily,
-                    options: <ReaderFontFamily, String>{
-                      ReaderFontFamily.system: l10n.fontFamilySystem,
-                      ReaderFontFamily.serif: l10n.fontFamilySerif,
-                      ReaderFontFamily.monospace: l10n.fontFamilyMonospace,
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  _StepperRow(
-                    palette: palette,
-                    label: l10n.settingsFontSize,
-                    value: '${settings.fontSize}',
-                    onDecrease: () => repo.setFontSize((settings.fontSize - 1)
-                        .clamp(ReaderSettings.minFontSize,
-                            ReaderSettings.maxFontSize)),
-                    onIncrease: () => repo.setFontSize((settings.fontSize + 1)
-                        .clamp(ReaderSettings.minFontSize,
-                            ReaderSettings.maxFontSize)),
-                  ),
-                  _StepperRow(
-                    palette: palette,
-                    label: l10n.settingsLineHeight,
-                    value: settings.lineHeight.toStringAsFixed(1),
-                    onDecrease: () => repo.setLineHeight(
-                        (settings.lineHeight - 0.1).clamp(
-                            ReaderSettings.minLineHeight,
-                            ReaderSettings.maxLineHeight)),
-                    onIncrease: () => repo.setLineHeight(
-                        (settings.lineHeight + 0.1).clamp(
-                            ReaderSettings.minLineHeight,
-                            ReaderSettings.maxLineHeight)),
-                  ),
-                  _StepperRow(
-                    palette: palette,
-                    label: l10n.settingsLetterSpacing,
-                    value: settings.letterSpacing.toStringAsFixed(1),
-                    onDecrease: () => repo.setLetterSpacing(
-                        (settings.letterSpacing - 0.1).clamp(
-                            ReaderSettings.minLetterSpacing,
-                            ReaderSettings.maxLetterSpacing)),
-                    onIncrease: () => repo.setLetterSpacing(
-                        (settings.letterSpacing + 0.1).clamp(
-                            ReaderSettings.minLetterSpacing,
-                            ReaderSettings.maxLetterSpacing)),
-                  ),
-                  _StepperRow(
-                    palette: palette,
-                    label: l10n.settingsDefaultWpm,
-                    value: '${fast.wpm} ${l10n.wpm}',
-                    onDecrease: () => repo.setDefaultWpm(
-                        (fast.wpm - fast.step).clamp(fast.minWpm, fast.maxWpm)),
-                    onIncrease: () => repo.setDefaultWpm(
-                        (fast.wpm + fast.step).clamp(fast.minWpm, fast.maxWpm)),
-                  ),
-                  Divider(height: 24, color: palette.dim.withValues(alpha: 0.4)),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(l10n.settingsPageAnimation, style: body),
-                    value: settings.pageAnimationEnabled,
-                    onChanged: repo.setPageAnimationEnabled,
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(l10n.settingsHaptics, style: body),
-                    value: settings.hapticsEnabled,
-                    onChanged: repo.setHapticsEnabled,
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(l10n.settingsReducedMotion, style: body),
-                    value: settings.reducedMotion,
-                    onChanged: repo.setReducedMotion,
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(l10n.readerModeLock, style: body),
-                    value: settings.modeLockEnabled,
-                    // Same haptic as the reader's bottom-bar lock button
-                    // (TASK-1007: mode lock toggle).
-                    onChanged: (value) {
-                      if (settings.hapticsEnabled) {
-                        unawaited(HapticFeedback.selectionClick());
-                      }
-                      repo.setModeLock(value);
-                    },
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(l10n.settingsSpeedLock, style: body),
-                    value: settings.speedLockEnabled,
-                    onChanged: repo.setSpeedLock,
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(l10n.settingsShowAdjacent, style: body),
-                    value: fast.showAdjacentContext,
-                    onChanged: repo.setShowAdjacentContext,
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(l10n.settingsNaturalPauses, style: body),
-                    subtitle: Text(
-                      l10n.settingsNaturalPausesHint,
-                      style: TextStyle(color: palette.dim, fontSize: 13),
-                    ),
-                    value: fast.naturalPausesEnabled,
-                    onChanged: repo.setNaturalPauses,
+                  IconButton(
+                    tooltip: l10n.dialogClose,
+                    color: palette.text,
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).maybePop(),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Text(l10n.settingsPresets, style: label),
+                    const SizedBox(height: 8),
+                    _PresetsSection(
+                        l10n: l10n, settings: settings, palette: palette),
+                    const SizedBox(height: 16),
+                    Text(l10n.settingsTheme, style: label),
+                    const SizedBox(height: 8),
+                    _SlidingSegments<ReaderThemeVariant>(
+                      palette: palette,
+                      groupValue: settings.theme,
+                      onChanged: repo.setTheme,
+                      options: <ReaderThemeVariant, String>{
+                        ReaderThemeVariant.light: l10n.themeLight,
+                        ReaderThemeVariant.sepia: l10n.themeSepia,
+                        ReaderThemeVariant.dark: l10n.themeDark,
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      l10n.settingsExample,
+                      style: TextStyle(color: palette.dim, fontSize: 12),
+                    ),
+                    const SizedBox(height: 4),
+                    // Live sample so theme/font/size/spacing changes are seen.
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: palette.dim.withValues(alpha: 0.45),
+                        ),
+                      ),
+                      child: Text(
+                        "Great holes secretly are digged where earth's pores "
+                        'ought to suffice, and things have learnt to walk that '
+                        'ought to crawl.',
+                        style: settings.fontFamily.applyTo(TextStyle(
+                          fontSize: settings.fontSize.toDouble(),
+                          height: settings.lineHeight,
+                          letterSpacing: settings.letterSpacing,
+                          color: palette.text,
+                        )),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(l10n.settingsFontFamily, style: label),
+                    const SizedBox(height: 8),
+                    _SlidingSegments<ReaderFontFamily>(
+                      palette: palette,
+                      groupValue: settings.fontFamily,
+                      onChanged: repo.setFontFamily,
+                      options: <ReaderFontFamily, String>{
+                        ReaderFontFamily.system: l10n.fontFamilySystem,
+                        ReaderFontFamily.serif: l10n.fontFamilySerif,
+                        ReaderFontFamily.monospace: l10n.fontFamilyMonospace,
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    _StepperRow(
+                      palette: palette,
+                      label: l10n.settingsFontSize,
+                      value: '${settings.fontSize}',
+                      onDecrease: () => repo.setFontSize((settings.fontSize - 1)
+                          .clamp(ReaderSettings.minFontSize,
+                              ReaderSettings.maxFontSize)),
+                      onIncrease: () => repo.setFontSize((settings.fontSize + 1)
+                          .clamp(ReaderSettings.minFontSize,
+                              ReaderSettings.maxFontSize)),
+                    ),
+                    _StepperRow(
+                      palette: palette,
+                      label: l10n.settingsLineHeight,
+                      value: settings.lineHeight.toStringAsFixed(1),
+                      onDecrease: () => repo.setLineHeight(
+                          (settings.lineHeight - 0.1).clamp(
+                              ReaderSettings.minLineHeight,
+                              ReaderSettings.maxLineHeight)),
+                      onIncrease: () => repo.setLineHeight(
+                          (settings.lineHeight + 0.1).clamp(
+                              ReaderSettings.minLineHeight,
+                              ReaderSettings.maxLineHeight)),
+                    ),
+                    _StepperRow(
+                      palette: palette,
+                      label: l10n.settingsLetterSpacing,
+                      value: settings.letterSpacing.toStringAsFixed(1),
+                      onDecrease: () => repo.setLetterSpacing(
+                          (settings.letterSpacing - 0.1).clamp(
+                              ReaderSettings.minLetterSpacing,
+                              ReaderSettings.maxLetterSpacing)),
+                      onIncrease: () => repo.setLetterSpacing(
+                          (settings.letterSpacing + 0.1).clamp(
+                              ReaderSettings.minLetterSpacing,
+                              ReaderSettings.maxLetterSpacing)),
+                    ),
+                    Divider(
+                        height: 24, color: palette.dim.withValues(alpha: 0.4)),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(l10n.settingsPageAnimation, style: body),
+                      value: settings.pageAnimationEnabled,
+                      onChanged: repo.setPageAnimationEnabled,
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(l10n.settingsHaptics, style: body),
+                      value: settings.hapticsEnabled,
+                      onChanged: repo.setHapticsEnabled,
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(l10n.settingsReducedMotion, style: body),
+                      value: settings.reducedMotion,
+                      onChanged: repo.setReducedMotion,
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(l10n.readerModeLock, style: body),
+                      value: settings.modeLockEnabled,
+                      // Same haptic as the reader's bottom-bar lock button
+                      // (TASK-1007: mode lock toggle).
+                      onChanged: (value) {
+                        if (settings.hapticsEnabled) {
+                          unawaited(HapticFeedback.selectionClick());
+                        }
+                        repo.setModeLock(value);
+                      },
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(l10n.settingsSpeedLock, style: body),
+                      value: settings.speedLockEnabled,
+                      onChanged: repo.setSpeedLock,
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(l10n.settingsShowAdjacent, style: body),
+                      value: fast.showAdjacentContext,
+                      onChanged: repo.setShowAdjacentContext,
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(l10n.settingsNaturalPauses, style: body),
+                      subtitle: Text(
+                        l10n.settingsNaturalPausesHint,
+                        style: TextStyle(color: palette.dim, fontSize: 13),
+                      ),
+                      value: fast.naturalPausesEnabled,
+                      onChanged: repo.setNaturalPauses,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -319,8 +336,7 @@ class _PresetsSection extends ConsumerWidget {
               width: 44,
               child: capsule(
                 onTap: controller.removeActive,
-                child:
-                    Icon(Icons.remove, size: 18, color: palette.text),
+                child: Icon(Icons.remove, size: 18, color: palette.text),
               ),
             ),
         ],
@@ -393,8 +409,7 @@ class _SlidingSegments<T extends Object> extends StatelessWidget {
                       child: Center(
                         child: Text(
                           options[key]!,
-                          style:
-                              TextStyle(color: palette.text, fontSize: 14),
+                          style: TextStyle(color: palette.text, fontSize: 14),
                         ),
                       ),
                     ),

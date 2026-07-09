@@ -140,6 +140,7 @@
   "readerPageOf": "страница {page} из {total}",
   "fastCurrentSpeedLabel": "Текущая скорость",
   "fastLockRotationHint": "Заблокировать поворот",
+  "settingsExample": "Пример",
   "settingsPresets": "Пресеты",
   "presetName": "Профиль {letter}",
   "@presetName": {"placeholders": {"letter": {"type": "String"}}},

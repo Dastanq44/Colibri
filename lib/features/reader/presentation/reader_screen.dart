@@ -389,11 +389,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
       case 'annotations':
         await _openAnnotations();
       case 'settings':
+        // Transparent host: the sheet paints its own themed background so a
+        // theme change repaints live (a backgroundColor here is fixed at
+        // open time).
         await showModalBottomSheet<void>(
           context: context,
           isScrollControlled: true,
-          showDragHandle: true,
-          backgroundColor: palette.background,
+          showDragHandle: false,
+          backgroundColor: Colors.transparent,
           builder: (_) => const ReaderSettingsSheet(),
         );
     }
@@ -856,6 +859,13 @@ class _NormalReaderView extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: palette.background,
         foregroundColor: palette.text,
+        // The global appBarTheme may pin the title colour to the chrome
+        // theme; override it so the book title follows the reading palette.
+        titleTextStyle: TextStyle(
+          color: palette.text,
+          fontSize: 17,
+          fontWeight: FontWeight.w600,
+        ),
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
