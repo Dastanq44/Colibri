@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,6 +11,12 @@ import 'data/remote/supabase_client_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // The app is portrait-only; rotation is enabled only inside the reader
+  // (ReaderScreen lifts this while it is open — landscape = fast mode).
+  await SystemChrome.setPreferredOrientations(
+    <DeviceOrientation>[DeviceOrientation.portraitUp],
+  );
 
   // Load and validate environment configuration. In dev, missing Supabase
   // keys are tolerated (the placeholder app still boots); in staging and

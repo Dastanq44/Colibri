@@ -314,10 +314,11 @@ class _WordRow extends StatelessWidget {
   final ReaderFontFamily fontFamily;
   final double scale;
 
-  /// Fraction of the half-width the playing-mode border sits at (leaves a
-  /// margin so context words stay clear of the screen edges). 0.92 puts the
-  /// border at half the previous edge distance, showing more context.
-  static const double _playingBandFactor = 0.92;
+  /// Fraction of the half-width the playing-mode border sits at. Kept tight
+  /// (0.6) so only a word or two shows per side while playing — less visual
+  /// noise around the highlighted word aids concentration. Paused mode still
+  /// spans the whole screen.
+  static const double _playingBandFactor = 0.6;
   static const int _maxWordsPerSide = 8;
 
   @override
