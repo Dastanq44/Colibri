@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/services/app_paths.dart';
 import '../../../data/local/app_database.dart';
 
 /// Device-local profile extras that have no cloud column yet: the avatar
@@ -20,8 +21,10 @@ class LocalProfileRepository {
   final Directory? _baseOverride;
 
   Future<String?> getAvatarPath() async {
-    final path = await _db.keyValueDao.getValue(_avatarKey);
-    if (path == null || path.isEmpty) return null;
+    // Container-safe: re-base a stored absolute path onto the current
+    // Documents directory (iOS moves the sandbox between app updates).
+    final path = AppPaths.absolute(await _db.keyValueDao.getValue(_avatarKey));
+    if (path == null) return null;
     return await File(path).exists() ? path : null;
   }
 

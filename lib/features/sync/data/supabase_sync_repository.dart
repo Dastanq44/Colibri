@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/failures.dart';
 import '../../../core/result/result.dart';
+import '../../../core/services/app_paths.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/repositories/sync_repository.dart';
 import '../domain/remote_progress.dart';
@@ -192,7 +193,8 @@ class SupabaseSyncRepository implements SyncRepository {
     String bookUuid,
     Map<String, dynamic> payload,
   ) async {
-    final path = payload['file_local_path'] as String?;
+    // Re-base: the payload may have been enqueued under an older container.
+    final path = AppPaths.absolute(payload['file_local_path'] as String?);
     if (path == null) throw StateError('Missing file path');
     final file = File(path);
     if (!await file.exists()) throw StateError('File missing');

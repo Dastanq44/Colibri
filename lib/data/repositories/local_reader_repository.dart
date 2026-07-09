@@ -6,6 +6,7 @@ import 'package:drift/drift.dart' show Value;
 import '../../core/errors/failures.dart';
 import '../../core/platform/device_id_service.dart';
 import '../../core/result/result.dart';
+import '../../core/services/app_paths.dart';
 import '../../features/reader/data/epub_extractor.dart';
 import '../../features/reader/domain/pdf_book_source.dart';
 import '../../features/reader/domain/reader_chapter.dart';
@@ -72,7 +73,8 @@ class LocalReaderRepository implements ReaderRepository {
     if (BookFormat.fromWire(book.format) != BookFormat.pdf) {
       return const Err(UnsupportedFormatFailure('Not a PDF book.'));
     }
-    if (!await File(book.fileLocalPath).exists()) {
+    final pdfPath = AppPaths.absolute(book.fileLocalPath);
+    if (pdfPath == null || !await File(pdfPath).exists()) {
       return const Err(FileMissingFailure('The book file is missing.'));
     }
 
@@ -89,14 +91,14 @@ class LocalReaderRepository implements ReaderRepository {
       PdfBookSource(
         bookId: book.id,
         title: book.title,
-        filePath: book.fileLocalPath,
+        filePath: pdfPath,
         initialPageNumber: initialPage,
       ),
     );
   }
 
   Future<Result<ReaderDocument>> _openEpub(LocalBook book) async {
-    final file = File(book.fileLocalPath);
+    final file = File(AppPaths.absolute(book.fileLocalPath)!);
     if (!await file.exists()) {
       return const Err(FileMissingFailure('The book file is missing.'));
     }
@@ -129,7 +131,7 @@ class LocalReaderRepository implements ReaderRepository {
   }
 
   Future<Result<ReaderDocument>> _openTxt(LocalBook book) async {
-    final file = File(book.fileLocalPath);
+    final file = File(AppPaths.absolute(book.fileLocalPath)!);
     if (!await file.exists()) {
       return const Err(FileMissingFailure('The book file is missing.'));
     }

@@ -6,11 +6,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app/app.dart';
 import 'core/config/app_config.dart';
+import 'core/services/app_paths.dart';
 import 'data/remote/supabase_bootstrap.dart';
 import 'data/remote/supabase_client_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Resolve the current sandbox Documents path once; all stored file paths
+  // are re-based onto it (iOS moves the container between app updates).
+  await AppPaths.ensureInitialized();
 
   // The app is portrait-only; rotation is enabled only inside the reader
   // (ReaderScreen lifts this while it is open — landscape = fast mode).
