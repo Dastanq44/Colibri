@@ -6,7 +6,7 @@ import 'package:flutter/gestures.dart' show LongPressGestureRecognizer;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart'
-    show HapticFeedback, SystemUiOverlayStyle;
+    show DeviceOrientation, HapticFeedback, SystemChrome, SystemUiOverlayStyle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
@@ -149,6 +149,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // The app is portrait-locked globally; only the reader may rotate
+    // (landscape enters fast mode). Restored on dispose.
+    SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
   }
 
   @override
@@ -167,6 +174,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   void dispose() {
     _switchTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
+    // Back to the app-wide portrait lock.
+    SystemChrome.setPreferredOrientations(
+      const <DeviceOrientation>[DeviceOrientation.portraitUp],
+    );
     // Final save (engine + reader are still alive during dispose). Exactly one
     // save — the active mode's; the inactive surface was synced at the last
     // handoff and its position would be stale here.
