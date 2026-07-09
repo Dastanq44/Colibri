@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
+import '../../../app/widgets/app_loader.dart';
 import '../../../app/widgets/glass_buttons.dart';
 import '../../../core/errors/failures.dart';
 import '../../../shared/models/bookshelf_status.dart';
@@ -134,10 +135,16 @@ class _SignedInBody extends ConsumerWidget {
                   ],
                 ),
               ),
-              IconButton(
-                tooltip: l10n.profileEditProfile,
-                icon: const Icon(CupertinoIcons.pencil),
-                onPressed: () => context.push(AppRoutes.editProfile),
+              // iOS press-fade behaviour instead of a Material icon button.
+              Semantics(
+                label: l10n.profileEditProfile,
+                button: true,
+                child: CupertinoButton(
+                  padding: const EdgeInsets.all(8),
+                  minimumSize: Size.zero,
+                  onPressed: () => context.push(AppRoutes.editProfile),
+                  child: const Icon(CupertinoIcons.pencil, size: 22),
+                ),
               ),
             ],
           ),
@@ -149,32 +156,31 @@ class _SignedInBody extends ConsumerWidget {
               child: Text(bio, style: theme.textTheme.bodyMedium),
             );
           }),
-          const SizedBox(height: 24),
-          // Local stats; avg WPM and badges stay placeholders until session
-          // tracking / badges land.
+          const SizedBox(height: 20),
+          // Local stats as a simple row — no grid, no dead vertical space.
           Builder(builder: (context) {
             final stats = ref.watch(readingStatsProvider).valueOrNull;
-            return GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              childAspectRatio: 2.4,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
+            return Row(
               children: <Widget>[
-                _StatCard(
-                  label: l10n.profileStatsBooksRead,
-                  value: stats?.booksRead.toString() ?? '—',
+                Expanded(
+                  child: _StatCard(
+                    label: l10n.profileStatsBooksRead,
+                    value: stats?.booksRead.toString() ?? '—',
+                  ),
                 ),
-                _StatCard(
-                  label: l10n.profileStatsCurrentBooks,
-                  value: stats?.currentBooks.toString() ?? '—',
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _StatCard(
+                    label: l10n.profileStatsCurrentBooks,
+                    value: stats?.currentBooks.toString() ?? '—',
+                  ),
                 ),
               ],
             );
           }),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           _CurrentlyReadingSection(l10n: l10n),
+          _FavoritesShowcase(l10n: l10n),
           _SyncSection(l10n: l10n),
           const SizedBox(height: 8),
           ListTile(
@@ -245,7 +251,7 @@ class _SyncSection extends ConsumerWidget {
         title: Text(l10n.syncSectionTitle),
         subtitle: Text(_statusText(state, pending)),
         trailing: running
-            ? const CupertinoActivityIndicator(radius: 10)
+            ? const AppLoader(size: 20)
             : TextButton(
                 onPressed: () =>
                     ref.read(syncControllerProvider.notifier).syncNow(),
@@ -330,7 +336,7 @@ class _CurrentlyReadingSection extends ConsumerWidget {
     final book = reading.first;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -375,6 +381,48 @@ class _CurrentlyReadingSection extends ConsumerWidget {
                   ],
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Horizontal showcase of the user's favourite books (covers), shown between
+/// the currently-reading card and the sync section.
+class _FavoritesShowcase extends ConsumerWidget {
+  const _FavoritesShowcase({required this.l10n});
+
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final favorites = ref.watch(favoriteBooksProvider);
+    if (favorites.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(l10n.profileFavorites, style: theme.textTheme.titleSmall),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 124,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: favorites.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, i) {
+                final book = favorites[i];
+                return GestureDetector(
+                  onTap: () => context.push(AppRoutes.reader(book.id)),
+                  child: BookCover(
+                      coverPath: book.coverPath, width: 82, height: 124),
+                );
+              },
             ),
           ),
         ],

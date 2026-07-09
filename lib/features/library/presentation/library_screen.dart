@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
+import '../../../app/widgets/app_loader.dart';
+import '../../../app/widgets/confirm_sheet.dart';
 import '../../../app/widgets/glass.dart';
 import '../../../app/widgets/glass_buttons.dart';
 import '../../../shared/models/bookshelf_status.dart';
@@ -56,7 +58,7 @@ class LibraryScreen extends ConsumerWidget {
         ]),
       ),
       body: booksAsync.when(
-        loading: () => const Center(child: CupertinoActivityIndicator(radius: 14)),
+        loading: () => const Center(child: AppLoader()),
         error: (_, __) => Center(child: Text(l10n.libraryLoadError)),
         data: (books) =>
             books.isEmpty ? _EmptyState(l10n: l10n) : _LibraryTabs(books: books),
@@ -185,10 +187,10 @@ class _LibraryTabsState extends State<_LibraryTabs> {
   }
 }
 
-/// Scrollable capsule bar in the sliding-segmented style: frosted glass
-/// track, white "thumb" behind the selected label. Slightly taller (44) than
-/// a stock segmented control.
-class _CategoryBar extends StatelessWidget {
+/// Scrollable capsule bar with a **sliding Liquid Glass thumb**: the capsule
+/// glides between categories (rather than blinking out/in) and the labels
+/// scroll past the screen edge. Frosted-glass track underneath.
+class _CategoryBar extends StatefulWidget {
   const _CategoryBar({
     required this.controller,
     required this.labels,
@@ -204,55 +206,109 @@ class _CategoryBar extends StatelessWidget {
   final ValueChanged<int> onTap;
 
   @override
+  State<_CategoryBar> createState() => _CategoryBarState();
+}
+
+class _CategoryBarState extends State<_CategoryBar> {
+  final GlobalKey _stackKey = GlobalKey();
+  List<Rect> _pillRects = const <Rect>[];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+  }
+
+  /// Measures each pill's rect within the scroll content, so the thumb can
+  /// be positioned (and animated) in the same coordinate space.
+  void _measure() {
+    final stackBox =
+        _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (stackBox == null || !mounted) return;
+    final rects = <Rect>[];
+    for (final key in widget.pillKeys) {
+      final box = key.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null) return;
+      rects.add(box.localToGlobal(Offset.zero, ancestor: stackBox) & box.size);
+    }
+    setState(() => _pillRects = rects);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final hasRects = _pillRects.length == widget.labels.length;
+    final Rect? thumb = hasRects ? _pillRects[widget.selected] : null;
+
     return GlassSurface(
       borderRadius: const BorderRadius.all(Radius.circular(22)),
       blur: 14,
       padding: const EdgeInsets.all(3),
       child: SizedBox(
         height: 38,
-        child: ListView.separated(
-          controller: controller,
+        child: SingleChildScrollView(
+          controller: widget.controller,
           scrollDirection: Axis.horizontal,
-          itemCount: labels.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 4),
-          itemBuilder: (context, i) {
-            final active = i == selected;
-            return AnimatedContainer(
-              key: pillKeys[i],
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-              decoration: BoxDecoration(
-                color: active
-                    ? (isDark ? const Color(0xFF636366) : Colors.white)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(19),
-                boxShadow: active
-                    ? <BoxShadow>[
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.12),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ]
-                    : null,
-              ),
-              child: CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                minimumSize: Size.zero,
-                onPressed: () => onTap(i),
-                child: Text(
-                  labels[i],
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: theme.colorScheme.onSurface,
-                    fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+          child: Stack(
+            key: _stackKey,
+            children: <Widget>[
+              // Sliding Liquid Glass thumb — glides to the active category.
+              if (thumb != null)
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 280),
+                  curve: Curves.easeOutCubic,
+                  left: thumb.left,
+                  top: 0,
+                  width: thumb.width,
+                  height: 38,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(19),
+                        boxShadow: <BoxShadow>[
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.10),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: const GlassPanel(
+                        radius: 19,
+                        child: SizedBox.expand(),
+                      ),
+                    ),
                   ),
                 ),
+              Row(
+                children: <Widget>[
+                  for (var i = 0; i < widget.labels.length; i++)
+                    Padding(
+                      key: widget.pillKeys[i],
+                      padding: EdgeInsets.only(
+                          right: i == widget.labels.length - 1 ? 0 : 4),
+                      child: CupertinoButton(
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        minimumSize: Size.zero,
+                        onPressed: () => widget.onTap(i),
+                        child: AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 200),
+                          style: theme.textTheme.titleSmall!.copyWith(
+                            // Constant weight keeps pill widths stable so the
+                            // measured thumb rects never drift.
+                            fontWeight: FontWeight.w600,
+                            color: i == widget.selected
+                                ? theme.colorScheme.onSurface
+                                : theme.colorScheme.onSurfaceVariant,
+                          ),
+                          child: Text(widget.labels[i]),
+                        ),
+                      ),
+                    ),
+                ],
               ),
-            );
-          },
+            ],
+          ),
         ),
       ),
     );
@@ -302,27 +358,15 @@ class _BookCard extends ConsumerWidget {
     WidgetRef ref,
     AppLocalizations l10n,
   ) async {
-    // Modern iOS destructive confirmation: bottom action sheet.
-    final confirmed = await showCupertinoModalPopup<bool>(
-      context: context,
-      builder: (ctx) => CupertinoActionSheet(
-        title: Text(l10n.removeBookTitle),
-        message: Text(l10n.removeBookBody),
-        actions: <Widget>[
-          CupertinoActionSheetAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(l10n.libraryRemove),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          isDefaultAction: true,
-          onPressed: () => Navigator.pop(ctx, false),
-          child: Text(l10n.dialogCancel),
-        ),
-      ),
+    // Modern floating glass confirmation card.
+    final confirmed = await showModernConfirmSheet(
+      context,
+      title: l10n.removeBookTitle,
+      message: l10n.removeBookBody,
+      confirmLabel: l10n.libraryRemove,
+      cancelLabel: l10n.dialogCancel,
     );
-    if (confirmed ?? false) {
+    if (confirmed) {
       await ref.read(libraryRepositoryProvider).removeBookFromLibrary(book.id);
     }
   }

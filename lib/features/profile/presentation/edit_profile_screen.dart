@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
+import '../../../app/widgets/app_loader.dart';
 import '../../../app/widgets/glass_buttons.dart';
 import '../../../shared/widgets/book_cover.dart';
 import '../../library/application/library_providers.dart';
@@ -136,7 +137,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           _saving
               ? const Padding(
                   padding: EdgeInsets.only(right: 16),
-                  child: CupertinoActivityIndicator(),
+                  child: AppLoader(size: 22),
                 )
               : TextButton(onPressed: _save, child: Text(l10n.profileDone)),
         ],

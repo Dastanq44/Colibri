@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
+import '../../../app/widgets/app_loader.dart';
 import '../../../app/widgets/glass_buttons.dart';
 import '../../../core/result/result.dart';
 import '../../auth/application/auth_providers.dart';
@@ -36,7 +37,7 @@ class BookDetailScreen extends ConsumerWidget {
               child: Text(l10n.catalogUnavailable, textAlign: TextAlign.center),
             ),
           ),
-        _ => const Center(child: CupertinoActivityIndicator(radius: 14)),
+        _ => const Center(child: AppLoader()),
       },
     );
   }

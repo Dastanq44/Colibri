@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
+import '../../../app/widgets/app_loader.dart';
 import '../../../app/widgets/glass_buttons.dart';
 import '../../../core/errors/failures.dart';
 import '../../../core/result/result.dart';
@@ -181,8 +182,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               FilledButton(
                 onPressed: _submitting ? null : _submit,
                 child: _submitting
-                    ? const CupertinoActivityIndicator(
-                        radius: 10, color: Colors.white)
+                    ? const AppLoader(size: 20, color: Colors.white)
                     : Text(switch (_mode) {
                         _AuthMode.signIn => l10n.authSignInButton,
                         _AuthMode.signUp => l10n.authSignUpButton,

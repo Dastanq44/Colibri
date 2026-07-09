@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
+import '../../../app/widgets/app_loader.dart';
 import '../../../core/result/result.dart';
 import '../application/notes_providers.dart';
 
@@ -35,7 +36,7 @@ class AnnotationsSheet extends ConsumerWidget {
       return const SafeArea(
         child: Padding(
           padding: EdgeInsets.all(32),
-          child: Center(child: CupertinoActivityIndicator()),
+          child: Center(child: AppLoader(size: 22)),
         ),
       );
     }

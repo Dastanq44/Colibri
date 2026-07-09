@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
+import '../../../app/widgets/app_loader.dart';
 import '../../../app/widgets/glass_buttons.dart';
 import '../../../core/errors/failures.dart';
 import '../application/import_controller.dart';
@@ -112,7 +113,7 @@ class _Running extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        const CupertinoActivityIndicator(radius: 14),
+        const AppLoader(),
         const SizedBox(height: 16),
         Text(label),
       ],

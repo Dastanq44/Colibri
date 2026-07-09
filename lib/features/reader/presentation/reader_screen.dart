@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/theme/reader_theme.dart';
+import '../../../app/widgets/app_loader.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/result/result.dart';
 import '../../../data/repositories/analytics_repository.dart';
@@ -615,7 +616,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     return switch (state) {
       ReaderLoading() => _Scaffold(
           title: l10n.readerTitle,
-          child: const Center(child: CupertinoActivityIndicator(radius: 14)),
+          child: const Center(child: AppLoader()),
         ),
       ReaderEmpty() => _Scaffold(
           title: l10n.readerTitle,

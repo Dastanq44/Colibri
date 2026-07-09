@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
+import '../../../app/widgets/app_loader.dart';
 import '../application/catalog_providers.dart';
 import '../domain/catalog_book.dart';
 
@@ -95,7 +96,7 @@ class _CatalogBody extends ConsumerWidget {
       );
     }
     if (state.loading && state.books.isEmpty) {
-      return const Center(child: CupertinoActivityIndicator(radius: 14));
+      return const Center(child: AppLoader());
     }
     if (state.books.isEmpty) {
       return _Message(
@@ -112,7 +113,7 @@ class _CatalogBody extends ConsumerWidget {
         if (index == state.books.length) {
           return const Padding(
             padding: EdgeInsets.all(16),
-            child: Center(child: CupertinoActivityIndicator()),
+            child: Center(child: AppLoader(size: 22)),
           );
         }
         return _CatalogTile(book: state.books[index]);
@@ -128,14 +129,15 @@ class _CatalogTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return ListTile(
       leading: const Icon(CupertinoIcons.book),
       trailing: const Icon(CupertinoIcons.chevron_forward, size: 18),
       title: Text(book.title, maxLines: 2, overflow: TextOverflow.ellipsis),
       subtitle: Text(
         book.authorDisplay.isEmpty
-            ? book.format.toUpperCase()
-            : '${book.authorDisplay} · ${book.format.toUpperCase()}',
+            ? l10n.libraryUnknownAuthor
+            : book.authorDisplay,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
