@@ -462,16 +462,20 @@ class _WordRow extends StatelessWidget {
               bottom: bottom,
               width: centreW,
               height: centreH,
-              // Grow-in: the word starts at the side-word scale and eases up
-              // to full size, so the incoming word visibly "becomes" the
-              // highlighted one instead of snapping. Keyed per token so the
-              // animation restarts on every advance.
+              // Grow-in while SCRUBBING only: as the drag steps to the next
+              // token, the incoming word starts at the side-word scale and
+              // eases up to full size, so the side word visibly "becomes"
+              // the highlighted one. Normal playback swaps instantly (begin
+              // == 1 -> no animation). Keyed per token so each step restarts.
               child: TweenAnimationBuilder<double>(
                 key: ValueKey<int>(state.currentTokenIndex),
-                tween: Tween<double>(begin: reduced ? 1.0 : 26 / 58, end: 1),
-                duration: reduced
-                    ? Duration.zero
-                    : const Duration(milliseconds: 140),
+                tween: Tween<double>(
+                  begin: (scrubbing && !reduced) ? 26 / 58 : 1.0,
+                  end: 1,
+                ),
+                duration: (scrubbing && !reduced)
+                    ? const Duration(milliseconds: 140)
+                    : Duration.zero,
                 curve: Curves.easeOutCubic,
                 builder: (context, grow, child) => Transform.scale(
                   scale: grow,
