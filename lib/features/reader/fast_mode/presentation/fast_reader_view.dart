@@ -633,6 +633,14 @@ class _FastBottomBar extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
+                      // Invisible twin of the % line balances the column so
+                      // the WPM text itself sits on the bar's centre line
+                      // (aligned with the icons); the % hangs below it.
+                      Opacity(
+                        opacity: 0,
+                        child: Text('${state.progressPercent.round()}%',
+                            style: theme.textTheme.bodySmall),
+                      ),
                       Text('${state.wpm} ${l10n.wpm}',
                           style: theme.textTheme.titleMedium
                               ?.copyWith(color: palette.text)),
