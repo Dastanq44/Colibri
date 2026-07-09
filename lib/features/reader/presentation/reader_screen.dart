@@ -336,42 +336,34 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
 
   Future<void> _openReaderMenu(ReaderReady state) async {
     final l10n = AppLocalizations.of(context);
+    // The reader's own sheets follow the chosen reading theme, not the app
+    // chrome theme.
+    final palette = ReaderPalette.of(
+      ref.read(readerSettingsProvider).valueOrNull?.theme ??
+          ReaderThemeVariant.light,
+    );
+    Widget row(IconData icon, String title, String value, BuildContext ctx) =>
+        ListTile(
+          leading: Icon(icon, color: palette.text),
+          title: Text(title, style: TextStyle(color: palette.text)),
+          onTap: () => Navigator.pop(ctx, value),
+        );
     final choice = await showModalBottomSheet<String>(
       context: context,
+      backgroundColor: palette.background,
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            ListTile(
-              leading: const Icon(Icons.list_alt_outlined),
-              title: Text(l10n.tableOfContents),
-              onTap: () => Navigator.pop(ctx, 'toc'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.search),
-              title: Text(l10n.readerSearchInBook),
-              onTap: () => Navigator.pop(ctx, 'search'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.bookmark_add_outlined),
-              title: Text(l10n.readerAddBookmark),
-              onTap: () => Navigator.pop(ctx, 'add_bookmark'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.note_add_outlined),
-              title: Text(l10n.readerAddNote),
-              onTap: () => Navigator.pop(ctx, 'add_note'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.bookmarks_outlined),
-              title: Text(l10n.readerAnnotations),
-              onTap: () => Navigator.pop(ctx, 'annotations'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: Text(l10n.readerSettingsTitle),
-              onTap: () => Navigator.pop(ctx, 'settings'),
-            ),
+            row(Icons.list_alt_outlined, l10n.tableOfContents, 'toc', ctx),
+            row(Icons.search, l10n.readerSearchInBook, 'search', ctx),
+            row(Icons.bookmark_add_outlined, l10n.readerAddBookmark,
+                'add_bookmark', ctx),
+            row(Icons.note_add_outlined, l10n.readerAddNote, 'add_note', ctx),
+            row(Icons.bookmarks_outlined, l10n.readerAnnotations,
+                'annotations', ctx),
+            row(Icons.settings_outlined, l10n.readerSettingsTitle, 'settings',
+                ctx),
           ],
         ),
       ),
@@ -401,6 +393,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
           context: context,
           isScrollControlled: true,
           showDragHandle: true,
+          backgroundColor: palette.background,
           builder: (_) => const ReaderSettingsSheet(),
         );
     }
@@ -1060,13 +1053,31 @@ class _PageText extends StatefulWidget {
   State<_PageText> createState() => _PageTextState();
 }
 
-class _PageTextState extends State<_PageText> {
+class _PageTextState extends State<_PageText>
+    with SingleTickerProviderStateMixin {
   static final RegExp _word = RegExp(r'\S+');
   final List<LongPressGestureRecognizer> _recognizers =
       <LongPressGestureRecognizer>[];
 
+  /// Selection pop: a brief background flash behind the newly marked word so
+  /// picking a resume point is clearly noticeable.
+  late final AnimationController _flash = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 550),
+  );
+
+  @override
+  void didUpdateWidget(_PageText old) {
+    super.didUpdateWidget(old);
+    if (widget.highlightOffset != null &&
+        widget.highlightOffset != old.highlightOffset) {
+      _flash.forward(from: 0);
+    }
+  }
+
   @override
   void dispose() {
+    _flash.dispose();
     _disposeRecognizers();
     super.dispose();
   }
@@ -1080,42 +1091,56 @@ class _PageTextState extends State<_PageText> {
 
   @override
   Widget build(BuildContext context) {
-    // Recognizers are per-word and rebuilt each frame; free the old ones first.
-    _disposeRecognizers();
-    final text = widget.page.text;
-    final pageStart = widget.page.startOffset;
-    final highlight = widget.highlightOffset;
+    return AnimatedBuilder(
+      animation: _flash,
+      builder: (context, _) {
+        // Recognizers are per-word and rebuilt each frame; free the old ones
+        // first.
+        _disposeRecognizers();
+        final text = widget.page.text;
+        final pageStart = widget.page.startOffset;
+        final highlight = widget.highlightOffset;
+        // Ease-out fade of the flash (1 -> 0).
+        final flashAlpha =
+            (1 - Curves.easeOutCubic.transform(_flash.value)) * 0.38;
 
-    final spans = <InlineSpan>[];
-    var last = 0;
-    for (final m in _word.allMatches(text)) {
-      if (m.start > last) {
-        spans.add(TextSpan(text: text.substring(last, m.start)));
-      }
-      final wordStart = pageStart + m.start;
-      final wordEnd = pageStart + m.end;
-      final isMarked =
-          highlight != null && highlight >= wordStart && highlight < wordEnd;
-      final recognizer = LongPressGestureRecognizer()
-        ..onLongPress = () => widget.onWordLongPress(wordStart);
-      _recognizers.add(recognizer);
-      spans.add(TextSpan(
-        text: m.group(0),
-        recognizer: recognizer,
-        style: isMarked
-            ? widget.style.copyWith(
-                decoration: TextDecoration.underline,
-                decorationColor: widget.highlightColor,
-                decorationThickness: 2.5,
-              )
-            : null,
-      ));
-      last = m.end;
-    }
-    if (last < text.length) {
-      spans.add(TextSpan(text: text.substring(last)));
-    }
+        final spans = <InlineSpan>[];
+        var last = 0;
+        for (final m in _word.allMatches(text)) {
+          if (m.start > last) {
+            spans.add(TextSpan(text: text.substring(last, m.start)));
+          }
+          final wordStart = pageStart + m.start;
+          final wordEnd = pageStart + m.end;
+          final isMarked = highlight != null &&
+              highlight >= wordStart &&
+              highlight < wordEnd;
+          final recognizer = LongPressGestureRecognizer()
+            ..onLongPress = () => widget.onWordLongPress(wordStart);
+          _recognizers.add(recognizer);
+          spans.add(TextSpan(
+            text: m.group(0),
+            recognizer: recognizer,
+            style: isMarked
+                ? widget.style.copyWith(
+                    decoration: TextDecoration.underline,
+                    decorationColor: widget.highlightColor,
+                    decorationThickness: 2.5,
+                    backgroundColor: flashAlpha <= 0.01
+                        ? null
+                        : widget.highlightColor
+                            .withValues(alpha: flashAlpha),
+                  )
+                : null,
+          ));
+          last = m.end;
+        }
+        if (last < text.length) {
+          spans.add(TextSpan(text: text.substring(last)));
+        }
 
-    return Text.rich(TextSpan(style: widget.style, children: spans));
+        return Text.rich(TextSpan(style: widget.style, children: spans));
+      },
+    );
   }
 }

@@ -20,7 +20,11 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
   Future<LocalReaderSettingsRow> getReaderSettings() async {
     final existing = await _readerRow();
     if (existing != null) return existing;
-    await into(localReaderSettings).insert(_defaultReaderCompanion());
+    // insertOrIgnore: two callers can race the first-run seed (e.g. the
+    // settings stream and the presets controller); the loser must be a no-op,
+    // not a UNIQUE-constraint crash.
+    await into(localReaderSettings)
+        .insert(_defaultReaderCompanion(), mode: InsertMode.insertOrIgnore);
     return (await _readerRow())!;
   }
 
@@ -41,7 +45,9 @@ class SettingsDao extends DatabaseAccessor<AppDatabase>
   Future<LocalFastSettingsRow> getFastSettings() async {
     final existing = await _fastRow();
     if (existing != null) return existing;
-    await into(localFastSettings).insert(_defaultFastCompanion());
+    // See getReaderSettings: seed races must not crash.
+    await into(localFastSettings)
+        .insert(_defaultFastCompanion(), mode: InsertMode.insertOrIgnore);
     return (await _fastRow())!;
   }
 

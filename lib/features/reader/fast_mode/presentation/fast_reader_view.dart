@@ -44,6 +44,10 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
   // Pinch-to-zoom on the word size.
   double? _pinchBase;
 
+  // Hold-and-drag scrubbing through the words.
+  bool _scrubbing = false;
+  int _scrubSteps = 0;
+
   @override
   void dispose() {
     _feedbackTimer?.cancel();
@@ -173,6 +177,31 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
                   // Pinch anywhere to resize the words; single taps fall
                   // through to the zones below.
                   child: GestureDetector(
+                    // Hold-and-drag: scrub backward/forward through the words
+                    // (right = back). Pauses playback; hints hide and the
+                    // words span the whole screen while scrubbing.
+                    onLongPressStart: (_) {
+                      engine.pause();
+                      _haptic(HapticFeedback.mediumImpact);
+                      setState(() {
+                        _scrubbing = true;
+                        _scrubSteps = 0;
+                      });
+                    },
+                    onLongPressMoveUpdate: (d) {
+                      const stepWidth = 44.0;
+                      final steps = (d.offsetFromOrigin.dx / stepWidth).round();
+                      if (steps == _scrubSteps) return;
+                      final delta = steps - _scrubSteps;
+                      _scrubSteps = steps;
+                      // Dragging right reveals earlier words (go back).
+                      engine.seekToTokenIndex(
+                          engine.state.currentTokenIndex - delta);
+                      _haptic(HapticFeedback.selectionClick);
+                    },
+                    onLongPressEnd: (_) => setState(() => _scrubbing = false),
+                    onLongPressCancel: () =>
+                        setState(() => _scrubbing = false),
                     onScaleStart: (_) =>
                         _pinchBase = ref.read(fastWordScaleProvider).valueOrNull,
                     onScaleUpdate: (d) {
@@ -241,13 +270,14 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
                               palette: palette,
                               fontFamily: fontFamily,
                               scale: scale,
+                              scrubbing: _scrubbing,
                             ),
                           ),
                         ),
                         Positioned.fill(
                           child: IgnorePointer(
                             child: _WpmHints(
-                              paused: !s.isPlaying,
+                              paused: !s.isPlaying && !_scrubbing,
                               step: s.settings.step,
                               speedLocked: s.settings.speedLockEnabled,
                               reduced: readerSettings?.reducedMotion ?? false,
@@ -256,14 +286,18 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
                             ),
                           ),
                         ),
-                        if (_feedback != null)
+                        // Feedback sits between the words and the WPM bar so
+                        // it is in the natural line of sight.
+                        if (_feedback != null && !_scrubbing)
                           Positioned(
-                            top: 24,
                             left: 0,
                             right: 0,
+                            bottom: 18,
                             child: IgnorePointer(
-                              child:
-                                  Center(child: _FeedbackChip(text: _feedback!)),
+                              child: Center(
+                                child: _FeedbackChip(
+                                    text: _feedback!, palette: palette),
+                              ),
                             ),
                           ),
                       ],
@@ -275,7 +309,7 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
                   state: s,
                   palette: palette,
                   modeLocked: widget.modeLocked,
-                  paused: !s.isPlaying,
+                  paused: !s.isPlaying && !_scrubbing,
                   reduced: readerSettings?.reducedMotion ?? false,
                   onToggleModeLock: widget.onToggleModeLock,
                   onPlayPause: () => _toggle(engine, l10n),
@@ -307,6 +341,7 @@ class _WordRow extends StatelessWidget {
     required this.palette,
     required this.fontFamily,
     required this.scale,
+    required this.scrubbing,
   });
 
   final FastModeState state;
@@ -314,12 +349,21 @@ class _WordRow extends StatelessWidget {
   final ReaderFontFamily fontFamily;
   final double scale;
 
+  /// Hold-and-drag scrubbing: no border at all — words span the full screen
+  /// and an edge-crossing word stays visible (clipped), never hidden.
+  final bool scrubbing;
+
   /// Fraction of the half-width the playing-mode border sits at. Kept tight
   /// (0.6) so only a word or two shows per side while playing — less visual
   /// noise around the highlighted word aids concentration. Paused mode still
   /// spans the whole screen.
   static const double _playingBandFactor = 0.6;
   static const int _maxWordsPerSide = 8;
+
+  /// Edge punctuation (quotes, commas, dots, brackets...) is kept visible but
+  /// ignored when centring the current word, so the *letters* sit centred.
+  static final RegExp _edges =
+      RegExp(r'^([^\p{L}\p{N}]*)(.*?)([^\p{L}\p{N}]*)$', unicode: true);
 
   @override
   Widget build(BuildContext context) {
@@ -364,10 +408,26 @@ class _WordRow extends StatelessWidget {
           : 1.0;
       final centreW = rawCurrent.width * fit;
       final centreH = rawCurrent.height * fit;
-      final centreHalf = centreW / 2;
+
+      // Centre on the word's *letters*: leading/trailing punctuation (quotes,
+      // commas, dots) stays rendered but does not shift the anchor.
+      var anchorHalf = centreW / 2;
+      if (currentText.isNotEmpty) {
+        final m = _edges.firstMatch(currentText);
+        final prefix = m?.group(1) ?? '';
+        final core = m?.group(2) ?? '';
+        if (core.isNotEmpty && (prefix.isNotEmpty || (m?.group(3) ?? '').isNotEmpty)) {
+          final prefixW =
+              prefix.isEmpty ? 0.0 : measure(prefix, currentStyle).width;
+          final coreW = measure(prefix + core, currentStyle).width - prefixW;
+          anchorHalf = fit * (prefixW + coreW / 2);
+        }
+      }
+      final leftHalf = anchorHalf; // word extent left of the screen centre
+      final rightHalf = centreW - anchorHalf; // ...and right of it
 
       // The border, measured from the centre: an inset band while playing, the
-      // screen edge while paused.
+      // screen edge while paused; none at all while scrubbing.
       final bandHalf = playing ? (maxW / 2) * _playingBandFactor : maxW / 2;
 
       // Floor-align every word (shared bottom) with the row vertically centred.
@@ -378,7 +438,7 @@ class _WordRow extends StatelessWidget {
       final children = <Widget>[];
       if (currentText.isNotEmpty) {
         children.add(Positioned(
-          left: centreX - centreHalf,
+          left: centreX - leftHalf,
           bottom: bottom,
           width: centreW,
           height: centreH,
@@ -392,16 +452,23 @@ class _WordRow extends StatelessWidget {
 
       if (showAdjacent && currentText.isNotEmpty) {
         for (final dir in const <int>[-1, 1]) {
-          // Distance from the centre to this word's near (inner) edge.
-          var inner = centreHalf + gap;
+          // Distance from the centre to this word's near (inner) edge, which
+          // starts at the current word's actual edge on this side.
+          var inner = (dir < 0 ? leftHalf : rightHalf) + gap;
           for (var step = 1; step <= _maxWordsPerSide; step++) {
             final text = state.tokenAt(dir * step)?.rawText;
             if (text == null || text.isEmpty) break;
             final w = measure(text, sideStyle).width;
             if (w <= 0) break;
-            // Show when the word's midpoint is inside the border; the first
-            // one that isn't ends this side (outer words are further still).
-            if (inner + w / 2 > bandHalf) break;
+            if (scrubbing) {
+              // No border: stop only once fully offscreen; a word crossing
+              // the screen edge still shows its visible part.
+              if (inner >= maxW / 2) break;
+            } else {
+              // Show when the word's midpoint is inside the border; the first
+              // one that isn't ends this side (outer words are further still).
+              if (inner + w / 2 > bandHalf) break;
+            }
             children.add(Positioned(
               left: dir < 0 ? centreX - inner - w : centreX + inner,
               bottom: bottom,
@@ -413,7 +480,7 @@ class _WordRow extends StatelessWidget {
         }
       }
 
-      // Clip so paused words that cross the screen edge show only their
+      // Clip so words that cross the screen edge show only their
       // on-screen part.
       return ClipRect(child: Stack(children: children));
     });
@@ -471,22 +538,23 @@ class _WpmHints extends StatelessWidget {
 }
 
 class _FeedbackChip extends StatelessWidget {
-  const _FeedbackChip({required this.text});
+  const _FeedbackChip({required this.text, required this.palette});
 
   final String text;
+  final ReaderPalette palette;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    // Inverse of the reading palette so the chip follows the chosen theme.
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: scheme.inverseSurface,
+        color: palette.text.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Semantics(
         liveRegion: true,
-        child: Text(text, style: TextStyle(color: scheme.onInverseSurface)),
+        child: Text(text, style: TextStyle(color: palette.background)),
       ),
     );
   }
