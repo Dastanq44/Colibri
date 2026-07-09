@@ -258,7 +258,10 @@ class _CategoryBarState extends State<_CategoryBar> {
             child: Stack(
               key: _stackKey,
               children: <Widget>[
-                // Sliding Liquid Glass thumb — glides to the active category.
+                // Sliding thumb — glides to the active category. A solid
+                // neutral capsule (the CupertinoSlidingSegmentedControl
+                // look): the liquid-glass lens shader smeared on a small
+                // capsule moving over the frosted track.
                 if (thumb != null)
                   AnimatedPositioned(
                     duration: const Duration(milliseconds: 280),
@@ -270,22 +273,17 @@ class _CategoryBarState extends State<_CategoryBar> {
                     child: IgnorePointer(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
+                          color: theme.brightness == Brightness.dark
+                              ? const Color(0xFF636366)
+                              : Colors.white,
                           borderRadius: BorderRadius.circular(19),
                           boxShadow: <BoxShadow>[
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.10),
-                              blurRadius: 10,
-                              offset: const Offset(0, 3),
+                              color: Colors.black.withValues(alpha: 0.12),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
                             ),
                           ],
-                        ),
-                        // Gentle lens settings: the default thickness smears
-                        // on a capsule this small.
-                        child: const GlassPanel(
-                          radius: 19,
-                          blur: 2,
-                          thickness: 6,
-                          child: SizedBox.expand(),
                         ),
                       ),
                     ),
