@@ -27,16 +27,53 @@ class SupabaseCatalogRepository implements CatalogRepository {
     final client = _client;
     if (client == null) return const Err(BackendUnavailableFailure());
     try {
-      var request = client.from('books').select(_bookColumns);
       final trimmed = query.trim();
-      if (trimmed.isNotEmpty) {
-        request = request.ilike('title', '%$trimmed%');
-      }
       final from = page * pageSize;
-      final rows = await request
+
+      if (trimmed.isEmpty) {
+        final rows = await client
+            .from('books')
+            .select(_bookColumns)
+            .order('title', ascending: true)
+            .range(from, from + pageSize - 1);
+        return Ok(rows.map(CatalogBook.fromRow).toList(growable: false));
+      }
+
+      // Match on title OR author name. PostgREST cannot OR across an embedded
+      // relation, so run both filters in parallel and merge by id (title
+      // matches first). Each leg is paged, so pagination keeps working; a
+      // page may contain up to 2x pageSize rows when both legs are full.
+      final byTitle = client
+          .from('books')
+          .select(_bookColumns)
+          .ilike('title', '%$trimmed%')
           .order('title', ascending: true)
           .range(from, from + pageSize - 1);
-      return Ok(rows.map(CatalogBook.fromRow).toList(growable: false));
+      // Same columns, but with an inner join so the author filter applies.
+      final byAuthor = client
+          .from('books')
+          .select(_bookColumns.replaceFirst(
+            'book_authors(authors(name))',
+            'book_authors!inner(authors!inner(name))',
+          ))
+          .ilike('book_authors.authors.name', '%$trimmed%')
+          .order('title', ascending: true)
+          .range(from, from + pageSize - 1);
+      final results = await Future.wait(<Future<List<Map<String, dynamic>>>>[
+        byTitle,
+        byAuthor,
+      ]);
+
+      final seen = <String>{};
+      final merged = <CatalogBook>[];
+      for (final rows in results) {
+        for (final row in rows) {
+          final book = CatalogBook.fromRow(row);
+          if (seen.add(book.id)) merged.add(book);
+        }
+      }
+      merged.sort((a, b) => a.title.compareTo(b.title));
+      return Ok(merged);
     } catch (e) {
       return Err(NetworkFailure('Catalog unavailable: $e'));
     }

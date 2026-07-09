@@ -91,10 +91,17 @@ class CatalogListController extends AutoDisposeNotifier<CatalogListState> {
     switch (result) {
       case Ok(value: final rows):
         _page += 1;
+        // Merged title+author search can return a book on two pages (one per
+        // match leg); dedupe by id when appending.
+        final existing = <String>{for (final b in state.books) b.id};
+        final fresh = reset
+            ? rows
+            : rows.where((b) => !existing.contains(b.id)).toList();
         state = state.copyWith(
-          books: reset ? rows : <CatalogBook>[...state.books, ...rows],
+          books: reset ? rows : <CatalogBook>[...state.books, ...fresh],
           loading: false,
-          canLoadMore: rows.length == _pageSize,
+          // A merged page can exceed pageSize when both legs are full.
+          canLoadMore: rows.length >= _pageSize,
         );
       case Err(failure: final f):
         state = state.copyWith(loading: false, failure: f);

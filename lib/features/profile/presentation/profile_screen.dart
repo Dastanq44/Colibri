@@ -141,27 +141,28 @@ class _SignedInBody extends ConsumerWidget {
         // tracking / badges land.
         Builder(builder: (context) {
           final stats = ref.watch(readingStatsProvider).valueOrNull;
-          return GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            childAspectRatio: 2.4,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
+          // Plain two-card row — no grid dead space.
+          return Row(
             children: <Widget>[
-              _StatCard(
-                label: l10n.profileStatsBooksRead,
-                value: stats?.booksRead.toString() ?? '—',
+              Expanded(
+                child: _StatCard(
+                  label: l10n.profileStatsBooksRead,
+                  value: stats?.booksRead.toString() ?? '—',
+                ),
               ),
-              _StatCard(
-                label: l10n.profileStatsCurrentBooks,
-                value: stats?.currentBooks.toString() ?? '—',
+              const SizedBox(width: 12),
+              Expanded(
+                child: _StatCard(
+                  label: l10n.profileStatsCurrentBooks,
+                  value: stats?.currentBooks.toString() ?? '—',
+                ),
               ),
             ],
           );
         }),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
         _CurrentlyReadingSection(l10n: l10n),
+        _FavoritesShowcase(l10n: l10n),
         _SyncSection(l10n: l10n),
         const SizedBox(height: 8),
         ListTile(
@@ -314,7 +315,7 @@ class _CurrentlyReadingSection extends ConsumerWidget {
     final book = reading.first;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -360,6 +361,49 @@ class _CurrentlyReadingSection extends ConsumerWidget {
                   ],
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Horizontal showcase of the user's favourite books (covers), shown between
+/// the currently-reading card and the sync section.
+class _FavoritesShowcase extends ConsumerWidget {
+  const _FavoritesShowcase({required this.l10n});
+
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final favorites = ref.watch(favoriteBooksProvider);
+    if (favorites.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(l10n.profileFavorites, style: theme.textTheme.titleSmall),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 124,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: favorites.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, i) {
+                final book = favorites[i];
+                return InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => context.push(AppRoutes.reader(book.id)),
+                  child: BookCover(
+                      coverPath: book.coverPath, width: 82, height: 124),
+                );
+              },
             ),
           ),
         ],

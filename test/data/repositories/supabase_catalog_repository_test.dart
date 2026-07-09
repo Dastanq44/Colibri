@@ -26,11 +26,11 @@ void main() {
 
   test('searchBooks parses rows with joined authors and sends paging',
       () async {
-    Uri? captured;
+    final captured = <Uri>[];
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     server.listen((req) {
-      captured = req.uri;
+      captured.add(req.uri);
       req.response
         ..statusCode = 200
         ..headers.contentType = ContentType.json
@@ -65,15 +65,26 @@ void main() {
         ((await repo.searchBooks(query: 'вой', page: 2, pageSize: 10)) as Ok)
             .value;
     expect(books, hasLength(2));
-    expect(books.first.title, 'Война и мир');
-    expect(books.first.authorDisplay, 'Лев Толстой');
-    expect(books.first.isFastModeSupported, isTrue);
-    expect(books.last.authorDisplay, isEmpty);
+    // Merged results re-sort by title, so look books up by title.
+    final tolstoy = books.firstWhere((b) => b.title == 'Война и мир');
+    expect(tolstoy.authorDisplay, 'Лев Толстой');
+    expect(tolstoy.isFastModeSupported, isTrue);
+    final noAuthor = books.firstWhere((b) => b.title == 'No Author Book');
+    expect(noAuthor.authorDisplay, isEmpty);
 
-    // ilike filter + ordered + paged (offset 20..29 for page 2 of 10).
-    final query = captured!.query;
-    expect(query, contains('title=ilike'));
-    expect(query, contains('order=title'));
+    // A query fans out to two legs: title ILIKE and author-name ILIKE (the
+    // rows are merged and deduped by id — same 2 rows served to both legs).
+    expect(captured, hasLength(2));
+    final queries = captured.map((u) => u.query).toList();
+    expect(queries.where((q) => q.contains('title=ilike')), hasLength(1));
+    expect(
+      queries.where(
+          (q) => q.contains('book_authors.authors.name=ilike')),
+      hasLength(1),
+    );
+    for (final q in queries) {
+      expect(q, contains('order=title'));
+    }
   });
 
   test('getBookDetails returns null for a missing book', () async {

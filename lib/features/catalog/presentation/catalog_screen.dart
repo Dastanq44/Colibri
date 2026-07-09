@@ -128,13 +128,14 @@ class _CatalogTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return ListTile(
       leading: const Icon(Icons.menu_book_outlined),
       title: Text(book.title, maxLines: 2, overflow: TextOverflow.ellipsis),
       subtitle: Text(
         book.authorDisplay.isEmpty
-            ? book.format.toUpperCase()
-            : '${book.authorDisplay} · ${book.format.toUpperCase()}',
+            ? l10n.libraryUnknownAuthor
+            : book.authorDisplay,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
