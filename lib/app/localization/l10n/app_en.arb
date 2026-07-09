@@ -167,6 +167,9 @@
   },
   "fastCurrentSpeedLabel": "Current speed",
   "fastLockRotationHint": "Lock rotation",
+  "settingsPresets": "Presets",
+  "presetName": "Profile {letter}",
+  "@presetName": {"placeholders": {"letter": {"type": "String"}}},
   "settingsProfiles": "Reading profiles",
   "settingsProfilesHint": "One-tap presets — you can fine-tune any setting afterwards.",
   "@settingsProfilesHint": {

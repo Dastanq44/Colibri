@@ -9,12 +9,13 @@ import '../../../../app/localization/generated/app_localizations.dart';
 import '../../../../app/theme/reader_fonts.dart';
 import '../../../../app/theme/reader_theme.dart';
 import '../application/reader_settings_providers.dart';
+import '../application/reading_presets_controller.dart';
 import '../domain/reader_settings.dart';
-import '../domain/reading_profile.dart';
+import '../domain/reading_preset.dart';
 
-/// Bottom-sheet panel for reader + fast-mode settings. Every change writes to
-/// local settings immediately and is reflected live (the sheet watches the
-/// same providers the reader does).
+/// Bottom-sheet panel for reader + fast-mode settings, themed by the chosen
+/// reading palette. Every change writes to local settings immediately, is
+/// reflected live, and updates the active preset's snapshot.
 class ReaderSettingsSheet extends ConsumerWidget {
   const ReaderSettingsSheet({super.key});
 
@@ -25,24 +26,32 @@ class ReaderSettingsSheet extends ConsumerWidget {
     final settings = ref.watch(readerSettingsProvider).valueOrNull ??
         ReaderSettings.defaults();
     final fast = ref.watch(fastModeSettingsProvider);
+    final palette = ReaderPalette.of(settings.theme);
+    final label = TextStyle(color: palette.text);
+    final body = TextStyle(color: palette.text, fontSize: 15);
 
     return SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           // Pinned header so the close button stays reachable no matter how far
-          // the (tall, scroll-controlled) settings list is scrolled — the sheet
-          // otherwise fills the screen and swallows swipe-to-dismiss on iOS.
+          // the (tall, scroll-controlled) settings list is scrolled.
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
             child: Row(
               children: <Widget>[
                 Expanded(
-                  child: Text(l10n.readerSettingsTitle,
-                      style: Theme.of(context).textTheme.titleLarge),
+                  child: Text(
+                    l10n.readerSettingsTitle,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(color: palette.text),
+                  ),
                 ),
                 IconButton(
                   tooltip: l10n.dialogClose,
+                  color: palette.text,
                   icon: const Icon(CupertinoIcons.xmark),
                   onPressed: () => Navigator.of(context).maybePop(),
                 ),
@@ -56,60 +65,62 @@ class ReaderSettingsSheet extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  Text(l10n.settingsProfiles),
-                  const SizedBox(height: 4),
-                  Text(l10n.settingsProfilesHint,
-                      style: Theme.of(context).textTheme.bodySmall),
+                  Text(l10n.settingsPresets, style: label),
                   const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: <Widget>[
-                      for (final profile in ReadingProfile.values)
-                        ActionChip(
-                          label: Text(_profileLabel(l10n, profile)),
-                          onPressed: () => repo.applyProfile(profile),
-                        ),
-                    ],
+                  _PresetsSection(
+                      l10n: l10n, settings: settings, palette: palette),
+                  const SizedBox(height: 16),
+                  Text(l10n.settingsTheme, style: label),
+                  const SizedBox(height: 8),
+                  _SlidingSegments<ReaderThemeVariant>(
+                    palette: palette,
+                    groupValue: settings.theme,
+                    onChanged: repo.setTheme,
+                    options: <ReaderThemeVariant, String>{
+                      ReaderThemeVariant.light: l10n.themeLight,
+                      ReaderThemeVariant.sepia: l10n.themeSepia,
+                      ReaderThemeVariant.dark: l10n.themeDark,
+                    },
                   ),
                   const SizedBox(height: 16),
-                  Text(l10n.settingsTheme),
-                  const SizedBox(height: 8),
-                  SegmentedButton<ReaderThemeVariant>(
-                    segments: <ButtonSegment<ReaderThemeVariant>>[
-                      ButtonSegment(
-                          value: ReaderThemeVariant.light,
-                          label: Text(l10n.themeLight)),
-                      ButtonSegment(
-                          value: ReaderThemeVariant.sepia,
-                          label: Text(l10n.themeSepia)),
-                      ButtonSegment(
-                          value: ReaderThemeVariant.dark,
-                          label: Text(l10n.themeDark)),
-                    ],
-                    selected: <ReaderThemeVariant>{settings.theme},
-                    onSelectionChanged: (s) => repo.setTheme(s.first),
+                  // Live sample so theme/font/size/spacing changes are seen.
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: palette.dim.withValues(alpha: 0.45),
+                      ),
+                    ),
+                    child: Text(
+                      "Great holes secretly are digged where earth's pores "
+                      'ought to suffice, and things have learnt to walk that '
+                      'ought to crawl.',
+                      style: settings.fontFamily.applyTo(TextStyle(
+                        fontSize: settings.fontSize.toDouble(),
+                        height: settings.lineHeight,
+                        letterSpacing: settings.letterSpacing,
+                        color: palette.text,
+                      )),
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  Text(l10n.settingsFontFamily),
+                  Text(l10n.settingsFontFamily, style: label),
                   const SizedBox(height: 8),
-                  SegmentedButton<ReaderFontFamily>(
-                    segments: <ButtonSegment<ReaderFontFamily>>[
-                      ButtonSegment(
-                          value: ReaderFontFamily.system,
-                          label: Text(l10n.fontFamilySystem)),
-                      ButtonSegment(
-                          value: ReaderFontFamily.serif,
-                          label: Text(l10n.fontFamilySerif)),
-                      ButtonSegment(
-                          value: ReaderFontFamily.monospace,
-                          label: Text(l10n.fontFamilyMonospace)),
-                    ],
-                    selected: <ReaderFontFamily>{settings.fontFamily},
-                    onSelectionChanged: (s) => repo.setFontFamily(s.first),
+                  _SlidingSegments<ReaderFontFamily>(
+                    palette: palette,
+                    groupValue: settings.fontFamily,
+                    onChanged: repo.setFontFamily,
+                    options: <ReaderFontFamily, String>{
+                      ReaderFontFamily.system: l10n.fontFamilySystem,
+                      ReaderFontFamily.serif: l10n.fontFamilySerif,
+                      ReaderFontFamily.monospace: l10n.fontFamilyMonospace,
+                    },
                   ),
                   const SizedBox(height: 8),
                   _StepperRow(
+                    palette: palette,
                     label: l10n.settingsFontSize,
                     value: '${settings.fontSize}',
                     onDecrease: () => repo.setFontSize((settings.fontSize - 1)
@@ -120,6 +131,7 @@ class ReaderSettingsSheet extends ConsumerWidget {
                             ReaderSettings.maxFontSize)),
                   ),
                   _StepperRow(
+                    palette: palette,
                     label: l10n.settingsLineHeight,
                     value: settings.lineHeight.toStringAsFixed(1),
                     onDecrease: () => repo.setLineHeight(
@@ -132,6 +144,7 @@ class ReaderSettingsSheet extends ConsumerWidget {
                             ReaderSettings.maxLineHeight)),
                   ),
                   _StepperRow(
+                    palette: palette,
                     label: l10n.settingsLetterSpacing,
                     value: settings.letterSpacing.toStringAsFixed(1),
                     onDecrease: () => repo.setLetterSpacing(
@@ -144,6 +157,7 @@ class ReaderSettingsSheet extends ConsumerWidget {
                             ReaderSettings.maxLetterSpacing)),
                   ),
                   _StepperRow(
+                    palette: palette,
                     label: l10n.settingsDefaultWpm,
                     value: '${fast.wpm} ${l10n.wpm}',
                     onDecrease: () => repo.setDefaultWpm(
@@ -151,28 +165,28 @@ class ReaderSettingsSheet extends ConsumerWidget {
                     onIncrease: () => repo.setDefaultWpm(
                         (fast.wpm + fast.step).clamp(fast.minWpm, fast.maxWpm)),
                   ),
-                  const Divider(height: 24),
+                  Divider(height: 24, color: palette.dim.withValues(alpha: 0.4)),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(l10n.settingsPageAnimation),
+                    title: Text(l10n.settingsPageAnimation, style: body),
                     value: settings.pageAnimationEnabled,
                     onChanged: repo.setPageAnimationEnabled,
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(l10n.settingsHaptics),
+                    title: Text(l10n.settingsHaptics, style: body),
                     value: settings.hapticsEnabled,
                     onChanged: repo.setHapticsEnabled,
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(l10n.settingsReducedMotion),
+                    title: Text(l10n.settingsReducedMotion, style: body),
                     value: settings.reducedMotion,
                     onChanged: repo.setReducedMotion,
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(l10n.readerModeLock),
+                    title: Text(l10n.readerModeLock, style: body),
                     value: settings.modeLockEnabled,
                     // Same haptic as the reader's bottom-bar lock button
                     // (TASK-1007: mode lock toggle).
@@ -185,20 +199,23 @@ class ReaderSettingsSheet extends ConsumerWidget {
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(l10n.settingsSpeedLock),
+                    title: Text(l10n.settingsSpeedLock, style: body),
                     value: settings.speedLockEnabled,
                     onChanged: repo.setSpeedLock,
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(l10n.settingsShowAdjacent),
+                    title: Text(l10n.settingsShowAdjacent, style: body),
                     value: fast.showAdjacentContext,
                     onChanged: repo.setShowAdjacentContext,
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(l10n.settingsNaturalPauses),
-                    subtitle: Text(l10n.settingsNaturalPausesHint),
+                    title: Text(l10n.settingsNaturalPauses, style: body),
+                    subtitle: Text(
+                      l10n.settingsNaturalPausesHint,
+                      style: TextStyle(color: palette.dim, fontSize: 13),
+                    ),
                     value: fast.naturalPausesEnabled,
                     onChanged: repo.setNaturalPauses,
                   ),
@@ -210,24 +227,161 @@ class ReaderSettingsSheet extends ConsumerWidget {
       ),
     );
   }
+}
 
-  String _profileLabel(AppLocalizations l10n, ReadingProfile profile) =>
-      switch (profile) {
-        ReadingProfile.standard => l10n.profileStandard,
-        ReadingProfile.highReadability => l10n.profileHighReadability,
-        ReadingProfile.dyslexia => l10n.profileDyslexia,
-        ReadingProfile.lowVision => l10n.profileLowVision,
-      };
+/// User presets as capsules, three per row (max 6 -> two rows), with +/-
+/// controls. The active preset is highlighted with a neutral fill.
+class _PresetsSection extends ConsumerWidget {
+  const _PresetsSection({
+    required this.l10n,
+    required this.settings,
+    required this.palette,
+  });
+
+  final AppLocalizations l10n;
+  final ReaderSettings settings;
+  final ReaderPalette palette;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(readingPresetsProvider).valueOrNull;
+    final controller = ref.read(readingPresetsProvider.notifier);
+    final presets = state?.presets ?? const <ReadingPreset>[];
+    final activeId = state?.activeId;
+    final isDark = palette.variant == ReaderThemeVariant.dark;
+    final highlight = isDark ? const Color(0xFF636366) : Colors.white;
+
+    Widget capsule({
+      required Widget child,
+      required VoidCallback? onTap,
+      bool active = false,
+    }) {
+      return GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active
+                ? highlight
+                : palette.dim.withValues(alpha: isDark ? 0.25 : 0.15),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: active
+                ? <BoxShadow>[
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.10),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: child,
+        ),
+      );
+    }
+
+    return LayoutBuilder(builder: (context, constraints) {
+      // Three capsules per row with 8px gaps.
+      final width = (constraints.maxWidth - 16) / 3;
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: <Widget>[
+          for (final preset in presets)
+            SizedBox(
+              width: width,
+              child: capsule(
+                active: preset.id == activeId,
+                onTap: () => controller.select(preset.id),
+                child: Text(
+                  l10n.presetName(preset.letter),
+                  style: TextStyle(
+                    color: palette.text,
+                    fontWeight: preset.id == activeId
+                        ? FontWeight.w600
+                        : FontWeight.w400,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+          if (presets.length < kMaxReadingPresets)
+            SizedBox(
+              width: 44,
+              child: capsule(
+                onTap: () => controller.addPreset(settings),
+                child: Icon(CupertinoIcons.add, size: 18, color: palette.text),
+              ),
+            ),
+          if (presets.length > 1)
+            SizedBox(
+              width: 44,
+              child: capsule(
+                onTap: controller.removeActive,
+                child:
+                    Icon(CupertinoIcons.minus, size: 18, color: palette.text),
+              ),
+            ),
+        ],
+      );
+    });
+  }
+}
+
+/// Fixed segmented control in the My Books category-bar style: neutral track,
+/// white sliding thumb (never the accent blue). All segments visible.
+class _SlidingSegments<T extends Object> extends StatelessWidget {
+  const _SlidingSegments({
+    required this.palette,
+    required this.groupValue,
+    required this.onChanged,
+    required this.options,
+  });
+
+  final ReaderPalette palette;
+  final T groupValue;
+  final ValueChanged<T> onChanged;
+  final Map<T, String> options;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = palette.variant == ReaderThemeVariant.dark;
+    return SizedBox(
+      width: double.infinity,
+      child: CupertinoSlidingSegmentedControl<T>(
+        groupValue: groupValue,
+        backgroundColor: palette.dim.withValues(alpha: isDark ? 0.25 : 0.15),
+        thumbColor: isDark ? const Color(0xFF636366) : Colors.white,
+        children: <T, Widget>{
+          for (final entry in options.entries)
+            entry.key: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                entry.value,
+                style: TextStyle(color: palette.text, fontSize: 14),
+              ),
+            ),
+        },
+        onValueChanged: (value) {
+          if (value != null) onChanged(value);
+        },
+      ),
+    );
+  }
 }
 
 class _StepperRow extends StatelessWidget {
   const _StepperRow({
+    required this.palette,
     required this.label,
     required this.value,
     required this.onDecrease,
     required this.onIncrease,
   });
 
+  final ReaderPalette palette;
   final String label;
   final String value;
   final VoidCallback onDecrease;
@@ -240,18 +394,24 @@ class _StepperRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: <Widget>[
-          Expanded(child: Text(label)),
+          Expanded(child: Text(label, style: TextStyle(color: palette.text))),
           IconButton(
             tooltip: l10n.settingsDecrease,
+            color: palette.text,
             icon: const Icon(CupertinoIcons.minus_circle),
             onPressed: onDecrease,
           ),
           SizedBox(
             width: 64,
-            child: Text(value, textAlign: TextAlign.center),
+            child: Text(
+              value,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: palette.text),
+            ),
           ),
           IconButton(
             tooltip: l10n.settingsIncrease,
+            color: palette.text,
             icon: const Icon(CupertinoIcons.plus_circle),
             onPressed: onIncrease,
           ),

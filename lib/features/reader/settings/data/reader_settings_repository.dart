@@ -14,6 +14,11 @@ class ReaderSettingsRepository {
 
   final AppDatabase _db;
 
+  /// One-shot read (seeds defaults on first use). Prefer this over
+  /// `watchReaderSettings().first` when a single value is needed.
+  Future<ReaderSettings> getReaderSettings() async =>
+      _toReader(await _db.settingsDao.getReaderSettings());
+
   Stream<ReaderSettings> watchReaderSettings() async* {
     await _db.settingsDao.getReaderSettings(); // seed defaults
     yield* _db.settingsDao.watchReaderSettings().map(

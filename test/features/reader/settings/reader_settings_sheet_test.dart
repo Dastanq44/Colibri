@@ -81,4 +81,12 @@ void main() {
 
     expect(find.byType(ReaderSettingsSheet), findsNothing);
   });
+
+  testWidgets('presets section shows the seeded Profile A', (tester) async {
+    await tester.pumpWidget(harness());
+    await tester.tap(find.text('open'));
+    await settle(tester);
+
+    expect(find.text('Profile A'), findsOneWidget);
+  });
 }
