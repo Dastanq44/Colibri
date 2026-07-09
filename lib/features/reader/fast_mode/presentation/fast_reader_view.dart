@@ -353,7 +353,7 @@ class _WordRow extends StatelessWidget {
   final ReaderFontFamily fontFamily;
   final double scale;
 
-  /// Honours the reduced-motion setting (disables the grow-in animation).
+  /// Honours the reduced-motion setting (scrub emphasis snaps instantly).
   final bool reduced;
 
   /// Hold-and-drag scrubbing: no border at all — words span the full screen
@@ -395,10 +395,10 @@ class _WordRow extends StatelessWidget {
     }
 
     // Scrub emphasis eases in/out: side words grow and gain contrast while
-    // the reader drags through the text.
+    // the reader drags through the text. Instant under reduced motion.
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(end: scrubbing ? 1 : 0),
-      duration: const Duration(milliseconds: 250),
+      duration: reduced ? Duration.zero : const Duration(milliseconds: 250),
       curve: Curves.easeOut,
       builder: (context, scrubT, _) {
         final sideStyle = fontFamily.applyTo(TextStyle(
@@ -462,36 +462,10 @@ class _WordRow extends StatelessWidget {
               bottom: bottom,
               width: centreW,
               height: centreH,
-              // Grow-in while SCRUBBING only: the incoming word starts at
-              // exactly the side words' current visual size — their font
-              // (26pt, enlarged toward 32pt by the scrub emphasis) relative
-              // to the highlighted word's rendered size (58pt shrunk by the
-              // FittedBox `fit` for long words) — and eases up to full size,
-              // so the side word visibly "becomes" the highlighted one.
-              // Normal playback swaps instantly (begin == 1 -> no animation).
-              // Keyed per token so each step restarts.
-              child: TweenAnimationBuilder<double>(
-                key: ValueKey<int>(state.currentTokenIndex),
-                tween: Tween<double>(
-                  begin: (scrubbing && !reduced)
-                      ? ((26 + 6 * scrubT) / (58 * fit)).clamp(0.0, 1.0)
-                      : 1.0,
-                  end: 1,
-                ),
-                duration: (scrubbing && !reduced)
-                    ? const Duration(milliseconds: 140)
-                    : Duration.zero,
-                curve: Curves.easeOutCubic,
-                builder: (context, grow, child) => Transform.scale(
-                  scale: grow,
-                  alignment: Alignment.bottomCenter,
-                  child: child,
-                ),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(currentText,
-                      style: currentStyle, maxLines: 1, softWrap: false),
-                ),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(currentText,
+                    style: currentStyle, maxLines: 1, softWrap: false),
               ),
             ));
           }
