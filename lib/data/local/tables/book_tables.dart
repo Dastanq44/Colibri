@@ -39,6 +39,7 @@ class LocalBookshelf extends Table {
   // 'reading' | 'finished' | 'abandoned' | 'want_to_read'
   TextColumn get status => text()();
   IntColumn get rating => integer().nullable()();
+  BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
   TextColumn get startedAt => text().nullable()();
   TextColumn get finishedAt => text().nullable()();
   TextColumn get addedAt => text().clientDefault(dbNow)();

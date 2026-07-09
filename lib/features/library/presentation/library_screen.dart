@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
 import '../../../shared/models/bookshelf_status.dart';
+import '../../../shared/widgets/book_cover.dart';
 import '../application/library_providers.dart';
 import '../domain/library_book.dart';
 
@@ -34,6 +35,7 @@ class LibraryScreen extends ConsumerWidget {
     final booksAsync = ref.watch(myBooksProvider);
     // Kick off the once-per-session cloud-shelf pull (no-op signed out).
     ref.watch(libraryCloudRefreshProvider);
+    ref.watch(coverBackfillProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -174,7 +176,9 @@ class _BookCard extends ConsumerWidget {
     _CardAction action,
   ) async {
     final repo = ref.read(libraryRepositoryProvider);
-    if (action.isRemove) {
+    if (action.isFavoriteToggle) {
+      await repo.setFavorite(book.id, !book.isFavorite);
+    } else if (action.isRemove) {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -209,8 +213,20 @@ class _BookCard extends ConsumerWidget {
 
     return Card(
       child: ListTile(
-        leading: _FormatBadge(label: book.format.badge),
-        title: Text(book.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+        leading: BookCover(coverPath: book.coverPath, width: 44, height: 62),
+        title: Row(
+          children: <Widget>[
+            Flexible(
+              child: Text(book.title,
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+            ),
+            if (book.isFavorite) ...<Widget>[
+              const SizedBox(width: 6),
+              Icon(Icons.favorite,
+                  size: 14, color: theme.colorScheme.primary),
+            ],
+          ],
+        ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -236,6 +252,13 @@ class _BookCard extends ConsumerWidget {
           tooltip: l10n.libraryChangeStatus,
           onSelected: (action) => _onAction(context, ref, l10n, action),
           itemBuilder: (context) => <PopupMenuEntry<_CardAction>>[
+            PopupMenuItem<_CardAction>(
+              value: const _CardAction.favorite(),
+              child: Text(book.isFavorite
+                  ? l10n.libraryRemoveFromFavorites
+                  : l10n.libraryAddToFavorites),
+            ),
+            const PopupMenuDivider(),
             for (final status in _statusTabs)
               PopupMenuItem<_CardAction>(
                 value: _CardAction.status(status),
@@ -253,39 +276,22 @@ class _BookCard extends ConsumerWidget {
   }
 }
 
-/// A book-card menu action: either change status, or remove.
+/// A book-card menu action: toggle favourite, change status, or remove.
 class _CardAction {
-  const _CardAction.status(this.status) : isRemove = false;
+  const _CardAction.status(this.status)
+      : isRemove = false,
+        isFavoriteToggle = false;
   const _CardAction.remove()
       : status = null,
-        isRemove = true;
+        isRemove = true,
+        isFavoriteToggle = false;
+  const _CardAction.favorite()
+      : status = null,
+        isRemove = false,
+        isFavoriteToggle = true;
 
   final BookShelfStatus? status;
   final bool isRemove;
+  final bool isFavoriteToggle;
 }
 
-class _FormatBadge extends StatelessWidget {
-  const _FormatBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: scheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: scheme.onSecondaryContainer,
-        ),
-      ),
-    );
-  }
-}

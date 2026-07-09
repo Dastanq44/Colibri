@@ -92,6 +92,20 @@ const String _syncQueueV1 = '''
   )
 ''';
 
+/// `local_bookshelf` as it existed before v5 (no `is_favorite`).
+const String _bookshelfV4 = '''
+  CREATE TABLE local_bookshelf (
+    book_id TEXT NOT NULL PRIMARY KEY,
+    status TEXT NOT NULL,
+    rating INTEGER,
+    started_at TEXT,
+    finished_at TEXT,
+    added_at TEXT NOT NULL,
+    last_opened_at TEXT,
+    sync_status TEXT NOT NULL DEFAULT 'local_only'
+  )
+''';
+
 Future<Set<String>> _columnsOf(GeneratedDatabase db, String table) async {
   final rows = await db.customSelect('PRAGMA table_info($table)').get();
   return rows.map((r) => r.read<String>('name')).toSet();
@@ -115,8 +129,8 @@ void main() {
   }
 
   test('v2 -> v3 adds haptics_enabled and keeps existing settings', () async {
-    await createLegacyDb(
-        2, const [_readerSettingsV2, _seedSettingsRow, _fastSettingsV3]);
+    await createLegacyDb(2,
+        const [_readerSettingsV2, _seedSettingsRow, _fastSettingsV3, _bookshelfV4]);
 
     // Reopen with the real database: runs onUpgrade(from: 2).
     final db = AppDatabase.forTesting(NativeDatabase(file));
@@ -138,7 +152,7 @@ void main() {
       () async {
     await createLegacyDb(
       1,
-      const [_readerSettingsV2, _seedSettingsRow, _syncQueueV1, _fastSettingsV3],
+      const [_readerSettingsV2, _seedSettingsRow, _syncQueueV1, _fastSettingsV3, _bookshelfV4],
     );
 
     final db = AppDatabase.forTesting(NativeDatabase(file));
@@ -152,7 +166,7 @@ void main() {
 
   test('v3 -> v4 adds natural_pauses_enabled and keeps fast settings',
       () async {
-    await createLegacyDb(3, const [_fastSettingsV3, _seedFastRow]);
+    await createLegacyDb(3, const [_fastSettingsV3, _seedFastRow, _bookshelfV4]);
 
     // Reopen with the real database: runs onUpgrade(from: 3, to: 4).
     final db = AppDatabase.forTesting(NativeDatabase(file));
@@ -170,6 +184,25 @@ void main() {
     );
     expect((await db.settingsDao.getFastSettings()).naturalPausesEnabled,
         isFalse);
+  });
+
+  test('v4 -> v5 adds is_favorite and keeps shelf rows', () async {
+    await createLegacyDb(4, const [
+      _bookshelfV4,
+      "INSERT INTO local_bookshelf (book_id, status, added_at) "
+          "VALUES ('b1', 'reading', '2026-01-01T00:00:00.000Z')",
+    ]);
+
+    final db = AppDatabase.forTesting(NativeDatabase(file));
+    addTearDown(db.close);
+
+    expect(await _columnsOf(db, 'local_bookshelf'), contains('is_favorite'));
+    final entry = await db.bookshelfDao.getByBookId('b1');
+    expect(entry == null, isFalse);
+    expect(entry!.isFavorite, isFalse); // new column default
+
+    await db.bookshelfDao.setFavorite('b1', true);
+    expect((await db.bookshelfDao.getByBookId('b1'))!.isFavorite, isTrue);
   });
 
   test('downgrade/re-upgrade cycle does not crash on duplicate columns',

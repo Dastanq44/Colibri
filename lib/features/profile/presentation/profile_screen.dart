@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,7 +7,11 @@ import 'package:go_router/go_router.dart';
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
 import '../../../core/errors/failures.dart';
+import '../../../shared/models/bookshelf_status.dart';
+import '../../../shared/widgets/book_cover.dart';
 import '../../auth/application/auth_providers.dart';
+import '../../library/application/library_providers.dart';
+import '../../library/domain/library_book.dart';
 import '../../sync/application/sync_controller.dart';
 import '../../sync/application/sync_providers.dart';
 import '../application/profile_providers.dart';
@@ -81,32 +87,6 @@ class _SignedInBody extends ConsumerWidget {
 
   final AppLocalizations l10n;
 
-  Future<void> _editName(
-    BuildContext context,
-    WidgetRef ref,
-    String current,
-  ) async {
-    final newName = await showDialog<String>(
-      context: context,
-      builder: (ctx) => _EditNameDialog(l10n: l10n, initialName: current),
-    );
-    if (newName == null || newName.isEmpty) return;
-    // The widget may have been disposed while the dialog was open (e.g. the
-    // session ended); `ref` must not be used after that.
-    if (!context.mounted) return;
-
-    final result =
-        await ref.read(profileRepositoryProvider).updateDisplayName(newName);
-    if (!context.mounted) return;
-    result.when(
-      ok: (_) => ref.invalidate(currentProfileProvider),
-      err: (failure) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(failure.message)));
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -120,13 +100,11 @@ class _SignedInBody extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: <Widget>[
-        // Header
+        // Header: avatar, name/email/bio, edit-profile.
         Row(
           children: <Widget>[
-            const CircleAvatar(
-              radius: 28,
-              child: Icon(Icons.person, size: 32),
-            ),
+            _ProfileAvatar(
+                path: ref.watch(avatarPathProvider).valueOrNull, radius: 32),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -144,13 +122,20 @@ class _SignedInBody extends ConsumerWidget {
               ),
             ),
             IconButton(
-              tooltip: l10n.profileEditName,
+              tooltip: l10n.profileEditProfile,
               icon: const Icon(Icons.edit_outlined),
-              onPressed: () =>
-                  _editName(context, ref, profile?.displayName ?? ''),
+              onPressed: () => context.push(AppRoutes.editProfile),
             ),
           ],
         ),
+        Builder(builder: (context) {
+          final bio = ref.watch(profileBioProvider).valueOrNull ?? '';
+          if (bio.isEmpty) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(bio, style: theme.textTheme.bodyMedium),
+          );
+        }),
         const SizedBox(height: 24),
         // Local stats; avg WPM and badges stay placeholders until session
         // tracking / badges land.
@@ -172,15 +157,11 @@ class _SignedInBody extends ConsumerWidget {
                 label: l10n.profileStatsCurrentBooks,
                 value: stats?.currentBooks.toString() ?? '—',
               ),
-              _StatCard(
-                label: l10n.profileStatsAvgWpm,
-                value: stats?.avgWpm?.toString() ?? '—',
-              ),
-              _StatCard(label: l10n.profileStatsBadges, value: '—'),
             ],
           );
         }),
         const SizedBox(height: 24),
+        _CurrentlyReadingSection(l10n: l10n),
         _SyncSection(l10n: l10n),
         const SizedBox(height: 8),
         ListTile(
@@ -194,52 +175,6 @@ class _SignedInBody extends ConsumerWidget {
           onPressed: () => ref.read(authRepositoryProvider).signOut(),
           icon: const Icon(Icons.logout),
           label: Text(l10n.profileSignOut),
-        ),
-      ],
-    );
-  }
-}
-
-/// Edit-name dialog. Owns its [TextEditingController] so it is disposed with
-/// the route (after the exit animation), not while the dialog is still closing.
-class _EditNameDialog extends StatefulWidget {
-  const _EditNameDialog({required this.l10n, required this.initialName});
-
-  final AppLocalizations l10n;
-  final String initialName;
-
-  @override
-  State<_EditNameDialog> createState() => _EditNameDialogState();
-}
-
-class _EditNameDialogState extends State<_EditNameDialog> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.initialName);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = widget.l10n;
-    return AlertDialog(
-      title: Text(l10n.profileEditName),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        decoration: InputDecoration(hintText: l10n.profileDisplayNameHint),
-      ),
-      actions: <Widget>[
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(l10n.profileCancel),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _controller.text.trim()),
-          child: Text(l10n.profileSave),
         ),
       ],
     );
@@ -331,6 +266,103 @@ class _StatCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ProfileAvatar extends StatelessWidget {
+  const _ProfileAvatar({required this.path, required this.radius});
+
+  final String? path;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    if (path != null) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundImage: FileImage(File(path!)),
+      );
+    }
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: scheme.surfaceContainerHighest,
+      child: Icon(Icons.person, size: radius, color: scheme.onSurfaceVariant),
+    );
+  }
+}
+
+/// The book currently being read (most recently opened "reading" entry),
+/// with its cover — tapping resumes it.
+class _CurrentlyReadingSection extends ConsumerWidget {
+  const _CurrentlyReadingSection({required this.l10n});
+
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final books = ref.watch(myBooksProvider).valueOrNull ?? const <LibraryBook>[];
+    final reading = books
+        .where((b) => b.status == BookShelfStatus.reading && b.hasLocalFile)
+        .toList()
+      ..sort((a, b) => (b.lastOpenedAt ?? DateTime(0))
+          .compareTo(a.lastOpenedAt ?? DateTime(0)));
+    if (reading.isEmpty) return const SizedBox.shrink();
+    final book = reading.first;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(l10n.profileCurrentlyReading, style: theme.textTheme.titleSmall),
+          const SizedBox(height: 10),
+          Card(
+            margin: EdgeInsets.zero,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => context.push(AppRoutes.reader(book.id)),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: <Widget>[
+                    BookCover(coverPath: book.coverPath, width: 48, height: 68),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(book.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleSmall),
+                          if (book.authorDisplay.isNotEmpty)
+                            Text(book.authorDisplay,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant)),
+                          const SizedBox(height: 6),
+                          LinearProgressIndicator(
+                            value: (book.percent / 100).clamp(0.0, 1.0),
+                            semanticsLabel: l10n.readerProgressLabel,
+                            semanticsValue: '${book.percent.round()}%',
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text('${book.percent.round()}%',
+                        style: theme.textTheme.labelMedium),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

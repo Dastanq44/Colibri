@@ -23,6 +23,15 @@ class EpubExtractionResult {
   final String? language;
 }
 
+/// Cover image pulled out of an EPUB: raw bytes + a lowercase extension
+/// (`jpg`, `png`, ...) suitable for a file name.
+class EpubCover {
+  const EpubCover({required this.bytes, required this.extension});
+
+  final List<int> bytes;
+  final String extension;
+}
+
 /// Minimal EPUB → text extractor: ZIP → `container.xml` → OPF manifest/spine →
 /// XHTML body text, preserving chapter order. Not a visual renderer.
 ///
@@ -93,6 +102,99 @@ class EpubExtractor {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Extracts the cover image, or `null` when the EPUB has none (or is
+  /// malformed). Looks for the EPUB 3 `properties="cover-image"` manifest
+  /// item first, then the EPUB 2 `<meta name="cover" content="<id>"/>`
+  /// pointer, then a manifest item whose id/href just says "cover".
+  EpubCover? extractCover(List<int> bytes) {
+    try {
+      final archive = ZipDecoder().decodeBytes(bytes);
+      final containerXml = _readText(archive, 'META-INF/container.xml');
+      if (containerXml == null) return null;
+      final opfPath = _opfPath(containerXml);
+      if (opfPath == null) return null;
+      final opfText = _readText(archive, opfPath);
+      if (opfText == null) return null;
+
+      final opf = XmlDocument.parse(opfText);
+      final baseDir = p.url.dirname(opfPath);
+
+      String? href;
+      final items = <String, XmlElement>{}; // id -> item
+      for (final el in opf.descendants.whereType<XmlElement>()) {
+        if (el.name.local != 'item') continue;
+        final id = el.getAttribute('id');
+        if (id != null) items[id] = el;
+        final props = el.getAttribute('properties') ?? '';
+        if (props.split(' ').contains('cover-image')) {
+          href = el.getAttribute('href');
+        }
+      }
+      if (href == null) {
+        for (final el in opf.descendants.whereType<XmlElement>()) {
+          if (el.name.local == 'meta' &&
+              (el.getAttribute('name')?.toLowerCase() == 'cover')) {
+            href = items[el.getAttribute('content')]?.getAttribute('href');
+            if (href != null) break;
+          }
+        }
+      }
+      // Last resort: an image manifest item literally named "cover".
+      if (href == null) {
+        for (final entry in items.entries) {
+          final media = entry.value.getAttribute('media-type') ?? '';
+          final h = entry.value.getAttribute('href') ?? '';
+          if (media.startsWith('image/') &&
+              (entry.key.toLowerCase().contains('cover') ||
+                  h.toLowerCase().contains('cover'))) {
+            href = h;
+            break;
+          }
+        }
+      }
+      if (href == null) return null;
+
+      final data = _readEntryBytes(archive, baseDir, href);
+      if (data == null || data.isEmpty) return null;
+      final ext = switch (p.url.extension(href).toLowerCase()) {
+        '.jpeg' || '.jpg' => 'jpg',
+        '.png' => 'png',
+        '.gif' => 'gif',
+        '.webp' => 'webp',
+        _ => 'jpg',
+      };
+      return EpubCover(bytes: data, extension: ext);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Resolves [href] (URI-decoded, fragment-stripped) against [baseDir] and
+  /// returns the entry's raw bytes.
+  List<int>? _readEntryBytes(Archive archive, String baseDir, String href) {
+    final hash = href.indexOf('#');
+    final raw = hash >= 0 ? href.substring(0, hash) : href;
+    String decoded;
+    try {
+      decoded = Uri.decodeFull(raw);
+    } on FormatException {
+      decoded = raw;
+    } on ArgumentError {
+      decoded = raw;
+    }
+    for (final candidate in <String>{decoded, raw}) {
+      final path = p.url.normalize(p.url.join(baseDir, candidate));
+      for (final file in archive.files) {
+        if (!file.isFile) continue;
+        if (file.name == path || file.name.toLowerCase() == path.toLowerCase()) {
+          final content = file.content;
+          if (content is List<int>) return content;
+        }
+      }
+    }
+    return null;
   }
 
   String? _opfPath(String containerXml) {

@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Colibri uses your photo library so you can choose a profile picture.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Colibri uses the camera so you can take a profile picture.</string>
 </dict>
 </plist>

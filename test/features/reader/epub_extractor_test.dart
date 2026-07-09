@@ -351,4 +351,80 @@ void main() {
       expect(result.chapters[0].text, contains('Обычный UTF-8'));
     });
   });
+
+  group('cover extraction', () {
+    const png = <int>[0x89, 0x50, 0x4E, 0x47, 1, 2, 3, 4];
+
+    List<int> epub(Map<String, Object> files) => _zipBytes(<String, List<int>>{
+          'META-INF/container.xml': utf8.encode(_containerXml),
+          for (final e in files.entries)
+            'OEBPS/${e.key}': e.value is String
+                ? utf8.encode(e.value as String)
+                : (e.value as List<int>),
+        });
+
+    test('EPUB 3 properties="cover-image" wins', () {
+      final bytes = epub(<String, Object>{
+        'content.opf': """
+<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <manifest>
+    <item id="cimg" href="art.png" media-type="image/png" properties="cover-image"/>
+    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine><itemref idref="c1"/></spine>
+</package>""",
+        'chapter1.xhtml': '<html><body><p>Text.</p></body></html>',
+        'art.png': png,
+      });
+
+      final cover = extractor.extractCover(bytes);
+      expect(cover, isNotNull);
+      expect(cover!.extension, 'png');
+      expect(cover.bytes, png);
+    });
+
+    test('EPUB 2 meta name="cover" pointer resolves via the manifest', () {
+      final bytes = epub(<String, Object>{
+        'content.opf': """
+<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+  <metadata><meta name="cover" content="cimg"/></metadata>
+  <manifest>
+    <item id="cimg" href="images/front.jpeg" media-type="image/jpeg"/>
+    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine><itemref idref="c1"/></spine>
+</package>""",
+        'chapter1.xhtml': '<html><body><p>Text.</p></body></html>',
+        'images/front.jpeg': png,
+      });
+
+      final cover = extractor.extractCover(bytes);
+      expect(cover, isNotNull);
+      expect(cover!.extension, 'jpg');
+    });
+
+    test('cover-named image item is the fallback', () {
+      final bytes = epub(<String, Object>{
+        'content.opf': _opfWithHref('chapter1.xhtml').replaceFirst(
+          '<manifest>',
+          '<manifest><item id="x" href="cover.png" media-type="image/png"/>',
+        ),
+        'chapter1.xhtml': '<html><body><p>Text.</p></body></html>',
+        'cover.png': png,
+      });
+
+      expect(extractor.extractCover(bytes), isNotNull);
+    });
+
+    test('no cover -> null (and malformed zip -> null)', () {
+      final bytes = epub(<String, Object>{
+        'content.opf': _opfWithHref('chapter1.xhtml'),
+        'chapter1.xhtml': '<html><body><p>Text.</p></body></html>',
+      });
+      expect(extractor.extractCover(bytes), isNull);
+      expect(extractor.extractCover(utf8.encode('not a zip')), isNull);
+    });
+  });
 }

@@ -5,8 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
 import '../../../data/repositories/analytics_repository.dart';
-import '../../../shared/models/book_format.dart';
+import '../../../shared/widgets/book_cover.dart';
 import '../../catalog/domain/catalog_book.dart';
+import '../../library/application/library_providers.dart';
 import '../../library/domain/library_book.dart';
 import '../../recommendations/application/recommendation_providers.dart';
 import '../../recommendations/domain/recommendation_rail.dart';
@@ -23,6 +24,9 @@ class HomeScreen extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final hasBooks = ref.watch(hasAnyBooksProvider);
     final continueReading = ref.watch(continueReadingProvider);
+    // Covers for pre-cover-support imports appear wherever the user lands
+    // first (session-scoped backfill; also watched by the library screen).
+    ref.watch(coverBackfillProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.homeTitle)),
@@ -77,51 +81,58 @@ class _RecommendationRailRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    // Cover-first rail: cover box, then title, then author · language.
     return SizedBox(
-      height: 120,
+      height: 226,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: rail.books.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
           final CatalogBook book = rail.books[index];
+          final author = book.authorDisplay;
+          final language = (book.language ?? '').toUpperCase();
+          final byline = <String>[
+            if (author.isNotEmpty) author,
+            if (language.isNotEmpty) language,
+          ].join(' · ');
           return SizedBox(
-            width: 150,
-            child: Card(
-              margin: EdgeInsets.zero,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () {
-                  ref.read(analyticsRepositoryProvider).logEvent(
-                    'recommendation_clicked',
-                    params: {'reason': rail.reason.name},
-                  );
-                  context.push(AppRoutes.bookDetail(book.id));
-                },
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Icon(Icons.menu_book_outlined,
-                          color: theme.colorScheme.primary),
-                      const SizedBox(height: 8),
-                      Text(
-                        book.title,
-                        style: theme.textTheme.bodyMedium,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (book.authorDisplay.isNotEmpty)
-                        Text(
-                          book.authorDisplay,
-                          style: theme.textTheme.bodySmall,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                    ],
+            width: 112,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () {
+                ref.read(analyticsRepositoryProvider).logEvent(
+                  'recommendation_clicked',
+                  params: {'reason': rail.reason.name},
+                );
+                context.push(AppRoutes.bookDetail(book.id));
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  BookCover(
+                    coverUrl: book.coverUrl,
+                    width: 112,
+                    height: 158,
+                    borderRadius: 10,
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  Text(
+                    book.title,
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (byline.isNotEmpty)
+                    Text(
+                      byline,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
               ),
             ),
           );
@@ -183,10 +194,10 @@ class _BookCard extends StatelessWidget {
           padding: EdgeInsets.all(large ? 16 : 12),
           child: Row(
             children: <Widget>[
-              Icon(
-                _formatIcon(book.format),
-                size: large ? 48 : 32,
-                color: theme.colorScheme.primary,
+              BookCover(
+                coverPath: book.coverPath,
+                width: large ? 56 : 42,
+                height: large ? 80 : 60,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -228,11 +239,6 @@ class _BookCard extends StatelessWidget {
     );
   }
 
-  IconData _formatIcon(BookFormat format) => switch (format) {
-        BookFormat.epub => Icons.menu_book_outlined,
-        BookFormat.txt => Icons.article_outlined,
-        BookFormat.pdf => Icons.picture_as_pdf_outlined,
-      };
 }
 
 class _GoalCard extends StatelessWidget {

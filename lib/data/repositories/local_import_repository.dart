@@ -136,9 +136,11 @@ class LocalImportRepository implements ImportRepository {
       var language = '';
       var isFastModeSupported = meta.isFastModeSupported;
       var textReadyStatus = meta.textReadyStatus;
+      String? coverLocalPath;
       if (format == BookFormat.epub) {
         try {
-          final epub = _epub.extract(await File(localPath).readAsBytes());
+          final bytes = await File(localPath).readAsBytes();
+          final epub = _epub.extract(bytes);
           if (epub != null && epub.chapters.isNotEmpty) {
             if (epub.title != null && epub.title!.trim().isNotEmpty) {
               title = epub.title!.trim();
@@ -149,6 +151,15 @@ class LocalImportRepository implements ImportRepository {
             language = epub.language?.trim() ?? '';
             isFastModeSupported = true;
             textReadyStatus = 'ready';
+          }
+          // Cover is cosmetic: extraction/save failures never block import.
+          final cover = _epub.extractCover(bytes);
+          if (cover != null) {
+            coverLocalPath = await _storage.saveCoverBytes(
+              bookId: bookId,
+              bytes: cover.bytes,
+              extension: cover.extension,
+            );
           }
           // Malformed/empty EPUB keeps the fallback metadata; it still imports
           // and shows a friendly message when opened.
@@ -172,6 +183,7 @@ class LocalImportRepository implements ImportRepository {
               fileLocalPath: localPath,
               authorDisplay: Value(authorDisplay),
               language: Value(language),
+              coverLocalPath: Value(coverLocalPath),
               checksumSha256: Value(checksum),
               isFastModeSupported: Value(isFastModeSupported),
               textReadyStatus: Value(textReadyStatus),

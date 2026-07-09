@@ -15,6 +15,7 @@ abstract final class AppRoutes {
   static const String onboarding = '/onboarding';
   static const String auth = '/auth';
   static const String settings = '/settings';
+  static const String editProfile = '/profile/edit';
   static const String importBook = '/import';
 
   // Parameterized routes.
@@ -29,6 +30,7 @@ abstract final class AppRoutes {
   static const String onboardingName = 'onboarding';
   static const String authName = 'auth';
   static const String settingsName = 'settings';
+  static const String editProfileName = 'editProfile';
   static const String importName = 'import';
   static const String bookDetailName = 'bookDetail';
   static const String readerName = 'reader';

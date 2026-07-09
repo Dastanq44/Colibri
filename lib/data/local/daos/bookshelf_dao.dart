@@ -45,5 +45,12 @@ class BookshelfDao extends DatabaseAccessor<AppDatabase>
   Stream<List<LocalShelfEntry>> watchByStatus(String status) =>
       (select(localBookshelf)..where((e) => e.status.equals(status))).watch();
 
+  /// Marks/unmarks a favourite. Local-only preference (not synced).
+  Future<void> setFavorite(String bookId, bool favorite) async {
+    await (update(localBookshelf)..where((e) => e.bookId.equals(bookId))).write(
+      LocalBookshelfCompanion(isFavorite: Value(favorite)),
+    );
+  }
+
   Future<List<LocalShelfEntry>> getAll() => select(localBookshelf).get();
 }
