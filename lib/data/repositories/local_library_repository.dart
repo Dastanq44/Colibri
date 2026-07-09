@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show SupabaseClient;
 
 import '../../core/errors/failures.dart';
 import '../../core/result/result.dart';
+import '../../core/services/app_paths.dart';
 import '../../features/catalog/domain/catalog_book.dart';
 import '../../features/import/data/file_storage_service.dart';
 import '../../features/library/domain/library_book.dart';
@@ -59,7 +60,7 @@ class LocalLibraryRepository implements LibraryRepository {
           : DateTime.tryParse(book.lastOpenedAt!),
       hasLocalFile: book.fileLocalPath.isNotEmpty,
       cloudBookId: book.cloudBookId,
-      coverPath: book.coverLocalPath,
+      coverPath: AppPaths.absolute(book.coverLocalPath),
       language: book.language,
       isFavorite: shelf?.isFavorite ?? false,
     );
@@ -116,7 +117,7 @@ class LocalLibraryRepository implements LibraryRepository {
           continue;
         }
         try {
-          final file = File(book.fileLocalPath);
+          final file = File(AppPaths.absolute(book.fileLocalPath)!);
           if (!await file.exists()) continue;
           final cover = extractor.extractCover(await file.readAsBytes());
           if (cover == null) continue;

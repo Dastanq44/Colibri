@@ -215,9 +215,13 @@ class _SyncSection extends ConsumerWidget {
   String _statusText(SyncUiState state, int pending) {
     return switch (state) {
       SyncRunning() => l10n.syncRunning,
+      // A run where every item failed (e.g. offline) is not a success —
+      // report it as failed instead of "Synced 0 item(s)".
       SyncSuccess(:final result) => result.processed == 0
           ? l10n.syncUpToDate
-          : l10n.syncSucceeded(result.succeeded),
+          : (result.succeeded == 0
+              ? l10n.syncFailed
+              : l10n.syncSucceeded(result.succeeded)),
       SyncFailure(:final failure) => failure is UnauthorizedFailure
           ? l10n.syncSignInRequired
           : l10n.syncFailed,
