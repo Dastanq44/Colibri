@@ -392,10 +392,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
         // Transparent host: the sheet paints its own themed background so a
         // theme change repaints live (a backgroundColor here is fixed at
         // open time).
+        // Close via the X only: no drag-to-dismiss, no barrier tap.
         await showModalBottomSheet<void>(
           context: context,
           isScrollControlled: true,
           showDragHandle: false,
+          enableDrag: false,
+          isDismissible: false,
           backgroundColor: Colors.transparent,
           builder: (_) => const ReaderSettingsSheet(),
         );
