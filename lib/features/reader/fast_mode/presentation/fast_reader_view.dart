@@ -462,15 +462,20 @@ class _WordRow extends StatelessWidget {
               bottom: bottom,
               width: centreW,
               height: centreH,
-              // Grow-in while SCRUBBING only: as the drag steps to the next
-              // token, the incoming word starts at the side-word scale and
-              // eases up to full size, so the side word visibly "becomes"
-              // the highlighted one. Normal playback swaps instantly (begin
-              // == 1 -> no animation). Keyed per token so each step restarts.
+              // Grow-in while SCRUBBING only: the incoming word starts at
+              // exactly the side words' current visual size — their font
+              // (26pt, enlarged toward 32pt by the scrub emphasis) relative
+              // to the highlighted word's rendered size (58pt shrunk by the
+              // FittedBox `fit` for long words) — and eases up to full size,
+              // so the side word visibly "becomes" the highlighted one.
+              // Normal playback swaps instantly (begin == 1 -> no animation).
+              // Keyed per token so each step restarts.
               child: TweenAnimationBuilder<double>(
                 key: ValueKey<int>(state.currentTokenIndex),
                 tween: Tween<double>(
-                  begin: (scrubbing && !reduced) ? 26 / 58 : 1.0,
+                  begin: (scrubbing && !reduced)
+                      ? ((26 + 6 * scrubT) / (58 * fit)).clamp(0.0, 1.0)
+                      : 1.0,
                   end: 1,
                 ),
                 duration: (scrubbing && !reduced)
