@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/localization/generated/app_localizations.dart';
 import '../../../app/router/app_routes.dart';
 import '../../../app/widgets/app_loader.dart';
+import '../../../shared/widgets/book_cover.dart';
 import '../application/catalog_providers.dart';
 import '../domain/catalog_book.dart';
 
@@ -108,6 +109,7 @@ class _CatalogBody extends ConsumerWidget {
     }
     return ListView.builder(
       controller: scroll,
+      padding: const EdgeInsets.only(top: 4, bottom: 24),
       itemCount: state.books.length + (state.loading ? 1 : 0),
       itemBuilder: (context, index) {
         if (index == state.books.length) {
@@ -130,18 +132,34 @@ class _CatalogTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return ListTile(
-      leading: const Icon(CupertinoIcons.book),
-      trailing: const Icon(CupertinoIcons.chevron_forward, size: 18),
-      title: Text(book.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-      subtitle: Text(
-        book.authorDisplay.isEmpty
-            ? l10n.libraryUnknownAuthor
-            : book.authorDisplay,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+    final theme = Theme.of(context);
+    final language = (book.language ?? '').toUpperCase();
+    final author = book.authorDisplay.isEmpty
+        ? l10n.libraryUnknownAuthor
+        : book.authorDisplay;
+    final byline = language.isEmpty ? author : '$author · $language';
+
+    // Same card treatment as My Books: cover box + title/author in a card.
+    return Card(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      child: ListTile(
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        leading: BookCover(coverUrl: book.coverUrl, width: 44, height: 62),
+        trailing: const Icon(CupertinoIcons.chevron_forward, size: 18),
+        title: Text(book.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Text(
+            byline,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ),
+        onTap: () => context.push(AppRoutes.bookDetail(book.id)),
       ),
-      onTap: () => context.push(AppRoutes.bookDetail(book.id)),
     );
   }
 }

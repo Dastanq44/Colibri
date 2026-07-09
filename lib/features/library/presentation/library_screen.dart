@@ -249,65 +249,82 @@ class _CategoryBarState extends State<_CategoryBar> {
         child: SingleChildScrollView(
           controller: widget.controller,
           scrollDirection: Axis.horizontal,
-          child: Stack(
-            key: _stackKey,
-            children: <Widget>[
-              // Sliding Liquid Glass thumb — glides to the active category.
-              if (thumb != null)
-                AnimatedPositioned(
-                  duration: const Duration(milliseconds: 280),
-                  curve: Curves.easeOutCubic,
-                  left: thumb.left,
-                  top: 0,
-                  width: thumb.width,
-                  height: 38,
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(19),
-                        boxShadow: <BoxShadow>[
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.10),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: const GlassPanel(
-                        radius: 19,
-                        child: SizedBox.expand(),
-                      ),
-                    ),
-                  ),
-                ),
-              Row(
-                children: <Widget>[
-                  for (var i = 0; i < widget.labels.length; i++)
-                    Padding(
-                      key: widget.pillKeys[i],
-                      padding: EdgeInsets.only(
-                          right: i == widget.labels.length - 1 ? 0 : 4),
-                      child: CupertinoButton(
-                        padding: const EdgeInsets.symmetric(horizontal: 18),
-                        minimumSize: Size.zero,
-                        onPressed: () => widget.onTap(i),
-                        child: AnimatedDefaultTextStyle(
-                          duration: const Duration(milliseconds: 200),
-                          style: theme.textTheme.titleSmall!.copyWith(
-                            // Constant weight keeps pill widths stable so the
-                            // measured thumb rects never drift.
-                            fontWeight: FontWeight.w600,
-                            color: i == widget.selected
-                                ? theme.colorScheme.onSurface
-                                : theme.colorScheme.onSurfaceVariant,
-                          ),
-                          child: Text(widget.labels[i]),
+          // Fix the scroll content to the full bar height: otherwise the
+          // pills row (intrinsic label height) top-aligns in the 38px
+          // viewport and the 38px thumb overflows it — labels and capsule
+          // render off-centre.
+          child: SizedBox(
+            height: 38,
+            child: Stack(
+              key: _stackKey,
+              children: <Widget>[
+                // Sliding Liquid Glass thumb — glides to the active category.
+                if (thumb != null)
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                    left: thumb.left,
+                    top: 0,
+                    width: thumb.width,
+                    height: 38,
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(19),
+                          boxShadow: <BoxShadow>[
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.10),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        // Gentle lens settings: the default thickness smears
+                        // on a capsule this small.
+                        child: const GlassPanel(
+                          radius: 19,
+                          blur: 2,
+                          thickness: 6,
+                          child: SizedBox.expand(),
                         ),
                       ),
                     ),
-                ],
-              ),
-            ],
+                  ),
+                Row(
+                  children: <Widget>[
+                    for (var i = 0; i < widget.labels.length; i++)
+                      Padding(
+                        key: widget.pillKeys[i],
+                        padding: EdgeInsets.only(
+                            right: i == widget.labels.length - 1 ? 0 : 4),
+                        // Full-height pill: CupertinoButton centres its label
+                        // vertically and the tap target spans the whole bar.
+                        child: SizedBox(
+                          height: 38,
+                          child: CupertinoButton(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 18),
+                            minimumSize: Size.zero,
+                            onPressed: () => widget.onTap(i),
+                            child: AnimatedDefaultTextStyle(
+                              duration: const Duration(milliseconds: 200),
+                              style: theme.textTheme.titleSmall!.copyWith(
+                                // Constant weight keeps pill widths stable so
+                                // the measured thumb rects never drift.
+                                fontWeight: FontWeight.w600,
+                                color: i == widget.selected
+                                    ? theme.colorScheme.onSurface
+                                    : theme.colorScheme.onSurfaceVariant,
+                              ),
+                              child: Text(widget.labels[i]),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
