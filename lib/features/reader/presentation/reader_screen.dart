@@ -360,8 +360,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
             row(Icons.bookmark_add_outlined, l10n.readerAddBookmark,
                 'add_bookmark', ctx),
             row(Icons.note_add_outlined, l10n.readerAddNote, 'add_note', ctx),
-            row(Icons.bookmarks_outlined, l10n.readerAnnotations,
-                'annotations', ctx),
+            row(Icons.bookmarks_outlined, l10n.readerAnnotations, 'annotations',
+                ctx),
             row(Icons.settings_outlined, l10n.readerSettingsTitle, 'settings',
                 ctx),
           ],
@@ -399,6 +399,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
           showDragHandle: false,
           enableDrag: false,
           isDismissible: false,
+          // Keeps the sheet below the status bar / Dynamic Island — modal
+          // bottom sheets strip the top MediaQuery padding, so the header
+          // and its close button would otherwise sit under the island.
+          useSafeArea: true,
           backgroundColor: Colors.transparent,
           builder: (_) => const ReaderSettingsSheet(),
         );
@@ -447,8 +451,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
           noteText: text,
         );
     if (result is Ok && mounted) {
-      unawaited(
-          ref.read(analyticsRepositoryProvider).logEvent('note_created'));
+      unawaited(ref.read(analyticsRepositoryProvider).logEvent('note_created'));
     }
     _showResultSnack(result is Ok ? l10n.noteAdded : null);
   }
@@ -462,8 +465,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     if (_cloudPositionChecked) return;
     _cloudPositionChecked = true;
 
-    final result =
-        await ref.read(syncRepositoryProvider).fetchRemoteProgress(widget.bookId);
+    final result = await ref
+        .read(syncRepositoryProvider)
+        .fetchRemoteProgress(widget.bookId);
     if (!mounted || result is! Ok<RemoteProgress?>) return;
     final remote = result.value;
     final offset = remote?.textOffset;
@@ -604,8 +608,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     });
 
     final state = ref.watch(readerControllerProvider(widget.bookId));
-    final settings =
-        ref.watch(readerSettingsProvider).valueOrNull ?? ReaderSettings.defaults();
+    final settings = ref.watch(readerSettingsProvider).valueOrNull ??
+        ReaderSettings.defaults();
 
     // If mode lock just turned on, cancel any pending auto-switch.
     if (settings.modeLockEnabled) {
@@ -627,7 +631,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
         ),
       ReaderEmpty() => _Scaffold(
           title: l10n.readerTitle,
-          child: _Message(icon: Icons.menu_book_outlined, text: l10n.readerEmpty),
+          child:
+              _Message(icon: Icons.menu_book_outlined, text: l10n.readerEmpty),
         ),
       ReaderUnsupported(:final reason) => _Scaffold(
           title: l10n.readerUnsupportedTitle,
@@ -638,7 +643,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
         ),
       ReaderFailed() => _Scaffold(
           title: l10n.readerTitle,
-          child: _Message(icon: Icons.error_outline, text: l10n.readerOpenError),
+          child:
+              _Message(icon: Icons.error_outline, text: l10n.readerOpenError),
         ),
       ReaderPdfReady(:final source) => PdfReaderView(source: source),
       ReaderReady() => _effectiveMode == ReaderMode.fast
@@ -671,7 +677,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
                   ? null
                   : (maxWidth, maxHeight, style, scaler) {
                       ref
-                          .read(readerControllerProvider(widget.bookId).notifier)
+                          .read(
+                              readerControllerProvider(widget.bookId).notifier)
                           .applyViewport(
                             maxWidth: maxWidth,
                             maxHeight: maxHeight,
@@ -683,7 +690,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     };
   }
 
-  String _unsupportedText(AppLocalizations l10n, ReaderUnsupportedReason reason) =>
+  String _unsupportedText(
+          AppLocalizations l10n, ReaderUnsupportedReason reason) =>
       switch (reason) {
         ReaderUnsupportedReason.pdf => l10n.readerPdfComingSoon,
         ReaderUnsupportedReason.malformedEpub => l10n.readerEpubError,
@@ -877,92 +885,101 @@ class _NormalReaderView extends StatelessWidget {
             : SystemUiOverlayStyle.dark,
         title: Text(state.document.title),
       ),
-      body: Column(
-        children: <Widget>[
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                // Re-paginate to fill this exact area (after the frame, so we
-                // never mutate state mid-build). No-op when nothing changed.
-                final report = onViewport;
-                if (report != null) {
-                  final scaler = MediaQuery.textScalerOf(context);
-                  final maxWidth =
-                      constraints.maxWidth - _pagePadding.horizontal;
-                  final maxHeight =
-                      constraints.maxHeight - _pagePadding.vertical;
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    report(maxWidth, maxHeight, textStyle, scaler);
-                  });
-                }
+      body: SafeArea(
+        // Keeps the page text clear of the notch / Dynamic Island when the
+        // reader is mode-locked into normal mode in landscape (the sensor
+        // housing sits on a horizontal edge there). Top inset is handled by
+        // the AppBar.
+        top: false,
+        child: Column(
+          children: <Widget>[
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Re-paginate to fill this exact area (after the frame, so we
+                  // never mutate state mid-build). No-op when nothing changed.
+                  final report = onViewport;
+                  if (report != null) {
+                    final scaler = MediaQuery.textScalerOf(context);
+                    final maxWidth =
+                        constraints.maxWidth - _pagePadding.horizontal;
+                    final maxHeight =
+                        constraints.maxHeight - _pagePadding.vertical;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      report(maxWidth, maxHeight, textStyle, scaler);
+                    });
+                  }
 
-                return Semantics(
-                  customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
-                    CustomSemanticsAction(label: l10n.readerPreviousPage):
-                        onPrevious,
-                    CustomSemanticsAction(label: l10n.readerNextPage): onNext,
-                  },
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTapUp: (details) {
-                      if (details.localPosition.dx < constraints.maxWidth / 2) {
-                        onPrevious();
-                      } else {
-                        onNext();
-                      }
+                  return Semantics(
+                    customSemanticsActions: <CustomSemanticsAction,
+                        VoidCallback>{
+                      CustomSemanticsAction(label: l10n.readerPreviousPage):
+                          onPrevious,
+                      CustomSemanticsAction(label: l10n.readerNextPage): onNext,
                     },
-                    // Shared-axis (horizontal) page turn: the old page fades
-                    // and slides off, the new one fades and slides in from the
-                    // turn direction. Instant when animation is off/reduced.
-                    child: PageTransitionSwitcher(
-                      duration: animate ? _turnDuration : Duration.zero,
-                      reverse: !pageForward,
-                      transitionBuilder: (child, primary, secondary) =>
-                          SharedAxisTransition(
-                        animation: primary,
-                        secondaryAnimation: secondary,
-                        transitionType: SharedAxisTransitionType.horizontal,
-                        fillColor: palette.background,
-                        child: child,
-                      ),
-                      child: KeyedSubtree(
-                        // Key on the user-turn id, not pageIndex: jumps and
-                        // re-pagination update content in place (no animation);
-                        // only a real turn changes the key and slides.
-                        key: ValueKey<int>(pageTurnId),
-                        // Fitted page fills the area without scrolling; ClipRect
-                        // guards the one transient frame before the first fit.
-                        child: ClipRect(
-                          child: Padding(
-                            padding: _pagePadding,
-                            child: Align(
-                              alignment: Alignment.topLeft,
-                              child: _PageText(
-                                page: state.currentPage,
-                                highlightOffset: state.highlightOffset,
-                                style: textStyle,
-                                highlightColor: palette.accent,
-                                onWordLongPress: onWordLongPress,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTapUp: (details) {
+                        if (details.localPosition.dx <
+                            constraints.maxWidth / 2) {
+                          onPrevious();
+                        } else {
+                          onNext();
+                        }
+                      },
+                      // Shared-axis (horizontal) page turn: the old page fades
+                      // and slides off, the new one fades and slides in from the
+                      // turn direction. Instant when animation is off/reduced.
+                      child: PageTransitionSwitcher(
+                        duration: animate ? _turnDuration : Duration.zero,
+                        reverse: !pageForward,
+                        transitionBuilder: (child, primary, secondary) =>
+                            SharedAxisTransition(
+                          animation: primary,
+                          secondaryAnimation: secondary,
+                          transitionType: SharedAxisTransitionType.horizontal,
+                          fillColor: palette.background,
+                          child: child,
+                        ),
+                        child: KeyedSubtree(
+                          // Key on the user-turn id, not pageIndex: jumps and
+                          // re-pagination update content in place (no animation);
+                          // only a real turn changes the key and slides.
+                          key: ValueKey<int>(pageTurnId),
+                          // Fitted page fills the area without scrolling; ClipRect
+                          // guards the one transient frame before the first fit.
+                          child: ClipRect(
+                            child: Padding(
+                              padding: _pagePadding,
+                              child: Align(
+                                alignment: Alignment.topLeft,
+                                child: _PageText(
+                                  page: state.currentPage,
+                                  highlightOffset: state.highlightOffset,
+                                  style: textStyle,
+                                  highlightColor: palette.accent,
+                                  onWordLongPress: onWordLongPress,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
-          _NormalBottomBar(
-            l10n: l10n,
-            progress: state.progress,
-            palette: palette,
-            modeLocked: modeLocked,
-            onToggleModeLock: onToggleModeLock,
-            onOpenMenu: onOpenMenu,
-          ),
-        ],
+            _NormalBottomBar(
+              l10n: l10n,
+              progress: state.progress,
+              palette: palette,
+              modeLocked: modeLocked,
+              onToggleModeLock: onToggleModeLock,
+              onOpenMenu: onOpenMenu,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1141,8 +1158,7 @@ class _PageTextState extends State<_PageText>
                     decorationThickness: 2.5,
                     backgroundColor: flashAlpha <= 0.01
                         ? null
-                        : widget.highlightColor
-                            .withValues(alpha: flashAlpha),
+                        : widget.highlightColor.withValues(alpha: flashAlpha),
                   )
                 : null,
           ));

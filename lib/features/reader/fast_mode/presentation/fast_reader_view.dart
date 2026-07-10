@@ -10,6 +10,7 @@ import '../../../../app/theme/reader_theme.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../data/repositories/analytics_repository.dart';
 import '../../settings/application/reader_settings_providers.dart';
+import '../application/fast_display_prefs.dart';
 import '../application/fast_mode_engine.dart';
 import '../application/fast_mode_providers.dart';
 import '../application/fast_word_scale_provider.dart';
@@ -47,6 +48,10 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
   // Hold-and-drag scrubbing through the words.
   bool _scrubbing = false;
   int _scrubSteps = 0;
+
+  // One-time first-open guide (null = not showing).
+  int? _guideStep;
+  bool _guideStarted = false;
 
   @override
   void dispose() {
@@ -135,6 +140,15 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
     final fontFamily = readerSettings?.fontFamily ?? ReaderFontFamily.system;
     final palette = ReaderPalette.of(theme);
     final scale = ref.watch(fastWordScaleProvider).valueOrNull ?? 1.0;
+    final uniform = ref.watch(fastUniformWordsProvider).valueOrNull ?? false;
+    // First-open guide: start once the seen-flag has loaded as false.
+    final guideSeen = ref.watch(fastGuideSeenProvider).valueOrNull;
+    if (guideSeen == false && !_guideStarted) {
+      _guideStarted = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _guideStep = 0);
+      });
+    }
 
     return ListenableBuilder(
       listenable: engine,
@@ -172,151 +186,169 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
         return Scaffold(
           backgroundColor: palette.background,
           body: SafeArea(
-            child: Column(
+            child: Stack(
               children: <Widget>[
-                Expanded(
-                  // Pinch anywhere to resize the words; single taps fall
-                  // through to the zones below.
-                  child: GestureDetector(
-                    // Hold-and-drag: scrub backward/forward through the words
-                    // (right = back). Pauses playback; hints hide and the
-                    // words span the whole screen while scrubbing.
-                    onLongPressStart: (_) {
-                      engine.pause();
-                      _haptic(HapticFeedback.mediumImpact);
-                      setState(() {
-                        _scrubbing = true;
-                        _scrubSteps = 0;
-                      });
-                    },
-                    onLongPressMoveUpdate: (d) {
-                      const stepWidth = 44.0;
-                      final steps = (d.offsetFromOrigin.dx / stepWidth).round();
-                      if (steps == _scrubSteps) return;
-                      final delta = steps - _scrubSteps;
-                      _scrubSteps = steps;
-                      // Dragging right reveals earlier words (go back).
-                      engine.seekToTokenIndex(
-                          engine.state.currentTokenIndex - delta);
-                      _haptic(HapticFeedback.selectionClick);
-                    },
-                    onLongPressEnd: (_) => setState(() => _scrubbing = false),
-                    onLongPressCancel: () => setState(() => _scrubbing = false),
-                    onScaleStart: (_) => _pinchBase =
-                        ref.read(fastWordScaleProvider).valueOrNull,
-                    onScaleUpdate: (d) {
-                      // Accept multi-touch pinch (pointerCount >= 2) and
-                      // trackpad pinch (reported as pointerCount 0); ignore a
-                      // single-finger drag (1) so it falls through to the taps.
-                      if (d.pointerCount == 1) return;
-                      final base = _pinchBase ?? scale;
-                      ref
-                          .read(fastWordScaleProvider.notifier)
-                          .preview(base * d.scale);
-                    },
-                    onScaleEnd: (_) {
-                      if (_pinchBase != null) {
-                        _pinchBase = null;
-                        unawaited(
-                            ref.read(fastWordScaleProvider.notifier).commit());
-                      }
-                    },
-                    child: Stack(
-                      children: <Widget>[
-                        Positioned.fill(
-                          child: Row(
-                            children: <Widget>[
-                              Expanded(
-                                child: Semantics(
-                                  label: l10n.fastDecreaseSpeed,
-                                  button: true,
-                                  child: GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: () => _decrease(engine, l10n),
-                                    child: const SizedBox.expand(),
+                Column(
+                  children: <Widget>[
+                    Expanded(
+                      // Pinch anywhere to resize the words; single taps fall
+                      // through to the zones below.
+                      child: GestureDetector(
+                        // Hold-and-drag: scrub backward/forward through the words
+                        // (right = back). Pauses playback; hints hide and the
+                        // words span the whole screen while scrubbing.
+                        onLongPressStart: (_) {
+                          engine.pause();
+                          _haptic(HapticFeedback.mediumImpact);
+                          setState(() {
+                            _scrubbing = true;
+                            _scrubSteps = 0;
+                          });
+                        },
+                        onLongPressMoveUpdate: (d) {
+                          const stepWidth = 44.0;
+                          final steps =
+                              (d.offsetFromOrigin.dx / stepWidth).round();
+                          if (steps == _scrubSteps) return;
+                          final delta = steps - _scrubSteps;
+                          _scrubSteps = steps;
+                          // Dragging right reveals earlier words (go back).
+                          engine.seekToTokenIndex(
+                              engine.state.currentTokenIndex - delta);
+                          _haptic(HapticFeedback.selectionClick);
+                        },
+                        onLongPressEnd: (_) =>
+                            setState(() => _scrubbing = false),
+                        onLongPressCancel: () =>
+                            setState(() => _scrubbing = false),
+                        onScaleStart: (_) => _pinchBase =
+                            ref.read(fastWordScaleProvider).valueOrNull,
+                        onScaleUpdate: (d) {
+                          // Accept multi-touch pinch (pointerCount >= 2) and
+                          // trackpad pinch (reported as pointerCount 0); ignore a
+                          // single-finger drag (1) so it falls through to the taps.
+                          if (d.pointerCount == 1) return;
+                          final base = _pinchBase ?? scale;
+                          ref
+                              .read(fastWordScaleProvider.notifier)
+                              .preview(base * d.scale);
+                        },
+                        onScaleEnd: (_) {
+                          if (_pinchBase != null) {
+                            _pinchBase = null;
+                            unawaited(ref
+                                .read(fastWordScaleProvider.notifier)
+                                .commit());
+                          }
+                        },
+                        child: Stack(
+                          children: <Widget>[
+                            Positioned.fill(
+                              child: Row(
+                                children: <Widget>[
+                                  Expanded(
+                                    child: Semantics(
+                                      label: l10n.fastDecreaseSpeed,
+                                      button: true,
+                                      child: GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: () => _decrease(engine, l10n),
+                                        child: const SizedBox.expand(),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Semantics(
+                                      label: s.isPlaying
+                                          ? l10n.fastPause
+                                          : l10n.fastPlay,
+                                      button: true,
+                                      child: GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: () => _toggle(engine, l10n),
+                                        child: const SizedBox.expand(),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Semantics(
+                                      label: l10n.fastIncreaseSpeed,
+                                      button: true,
+                                      child: GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: () => _increase(engine, l10n),
+                                        child: const SizedBox.expand(),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: _WordRow(
+                                  state: s,
+                                  palette: palette,
+                                  fontFamily: fontFamily,
+                                  scale: scale,
+                                  scrubbing: _scrubbing,
+                                  uniform: uniform,
+                                  reduced:
+                                      readerSettings?.reducedMotion ?? false,
+                                ),
+                              ),
+                            ),
+                            // Feedback sits between the words and the WPM bar so
+                            // it is in the natural line of sight.
+                            if (_feedback != null && !_scrubbing)
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                bottom: 18,
+                                child: IgnorePointer(
+                                  child: Center(
+                                    child: _FeedbackChip(
+                                        text: _feedback!, palette: palette),
                                   ),
                                 ),
                               ),
-                              Expanded(
-                                child: Semantics(
-                                  label: s.isPlaying
-                                      ? l10n.fastPause
-                                      : l10n.fastPlay,
-                                  button: true,
-                                  child: GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: () => _toggle(engine, l10n),
-                                    child: const SizedBox.expand(),
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Semantics(
-                                  label: l10n.fastIncreaseSpeed,
-                                  button: true,
-                                  child: GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: () => _increase(engine, l10n),
-                                    child: const SizedBox.expand(),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                          ],
                         ),
-                        Positioned.fill(
-                          child: IgnorePointer(
-                            child: _WordRow(
-                              state: s,
-                              palette: palette,
-                              fontFamily: fontFamily,
-                              scale: scale,
-                              scrubbing: _scrubbing,
-                              reduced:
-                                  readerSettings?.reducedMotion ?? false,
-                            ),
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: IgnorePointer(
-                            child: _WpmHints(
-                              paused: !s.isPlaying && !_scrubbing,
-                              step: s.settings.step,
-                              speedLocked: s.settings.speedLockEnabled,
-                              reduced: readerSettings?.reducedMotion ?? false,
-                              l10n: l10n,
-                              palette: palette,
-                            ),
-                          ),
-                        ),
-                        // Feedback sits between the words and the WPM bar so
-                        // it is in the natural line of sight.
-                        if (_feedback != null && !_scrubbing)
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 18,
-                            child: IgnorePointer(
-                              child: Center(
-                                child: _FeedbackChip(
-                                    text: _feedback!, palette: palette),
-                              ),
-                            ),
-                          ),
-                      ],
+                      ),
+                    ),
+                    _FastBottomBar(
+                      l10n: l10n,
+                      state: s,
+                      palette: palette,
+                      modeLocked: widget.modeLocked,
+                      uniform: uniform,
+                      onToggleModeLock: widget.onToggleModeLock,
+                      onToggleUniform: () {
+                        ref.read(fastUniformWordsProvider.notifier).toggle();
+                        _flash(uniform
+                            ? l10n.fastMagnifiedWords
+                            : l10n.fastUniformWords);
+                      },
+                      onPlayPause: () => _toggle(engine, l10n),
+                    ),
+                  ],
+                ),
+                // One-time step-by-step guide over everything.
+                if (_guideStep != null)
+                  Positioned.fill(
+                    child: _FastGuide(
+                      step: _guideStep!,
+                      l10n: l10n,
+                      onAdvance: () {
+                        if (_guideStep! >= 4) {
+                          ref.read(fastGuideSeenProvider.notifier).markSeen();
+                          setState(() => _guideStep = null);
+                        } else {
+                          setState(() => _guideStep = _guideStep! + 1);
+                        }
+                      },
                     ),
                   ),
-                ),
-                _FastBottomBar(
-                  l10n: l10n,
-                  state: s,
-                  palette: palette,
-                  modeLocked: widget.modeLocked,
-                  paused: !s.isPlaying && !_scrubbing,
-                  reduced: readerSettings?.reducedMotion ?? false,
-                  onToggleModeLock: widget.onToggleModeLock,
-                  onPlayPause: () => _toggle(engine, l10n),
-                ),
               ],
             ),
           ),
@@ -345,6 +377,7 @@ class _WordRow extends StatelessWidget {
     required this.fontFamily,
     required this.scale,
     required this.scrubbing,
+    required this.uniform,
     required this.reduced,
   });
 
@@ -359,6 +392,11 @@ class _WordRow extends StatelessWidget {
   /// Hold-and-drag scrubbing: no border at all — words span the full screen
   /// and an edge-crossing word stays visible (clipped), never hidden.
   final bool scrubbing;
+
+  /// Uniform display mode: every word (centre included) renders at the same
+  /// size and full text colour — no magnification, no dimming, no scrub
+  /// emphasis.
+  final bool uniform;
 
   /// Fraction of the half-width the playing-mode border sits at. Kept tight
   /// (0.6) so only a word or two shows per side while playing — less visual
@@ -376,8 +414,8 @@ class _WordRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final textScaler = MediaQuery.textScalerOf(context);
     final currentStyle = fontFamily.applyTo(TextStyle(
-      fontSize: 58 * scale,
-      fontWeight: FontWeight.w600,
+      fontSize: (uniform ? 28 : 58) * scale,
+      fontWeight: uniform ? FontWeight.w400 : FontWeight.w600,
       color: palette.text,
       height: 1.0,
     ));
@@ -401,9 +439,14 @@ class _WordRow extends StatelessWidget {
       duration: reduced ? Duration.zero : const Duration(milliseconds: 250),
       curve: Curves.easeOut,
       builder: (context, scrubT, _) {
+        // Uniform mode: side words match the centre word exactly (same size,
+        // full text colour, no scrub emphasis). Otherwise: 28pt dimmed words
+        // that grow and gain contrast while scrubbing.
         final sideStyle = fontFamily.applyTo(TextStyle(
-          fontSize: (26 + 6 * scrubT) * scale,
-          color: Color.lerp(palette.dim, palette.text, 0.55 * scrubT),
+          fontSize: (uniform ? 28 : 28 + 6 * scrubT) * scale,
+          color: uniform
+              ? palette.text
+              : Color.lerp(palette.dim, palette.text, 0.55 * scrubT),
           height: 1.0,
         ));
         return LayoutBuilder(builder: (context, constraints) {
@@ -511,56 +554,6 @@ class _WordRow extends StatelessWidget {
   }
 }
 
-/// Gray tap hints for the ±WPM zones, shown while paused and faded out on
-/// resume. Sit a little below the top edge, no repeated +/- glyph, larger text.
-class _WpmHints extends StatelessWidget {
-  const _WpmHints({
-    required this.paused,
-    required this.step,
-    required this.speedLocked,
-    required this.reduced,
-    required this.l10n,
-    required this.palette,
-  });
-
-  final bool paused;
-  final int step;
-  final bool speedLocked;
-  final bool reduced;
-  final AppLocalizations l10n;
-  final ReaderPalette palette;
-
-  @override
-  Widget build(BuildContext context) {
-    if (speedLocked) return const SizedBox.shrink();
-    final duration =
-        reduced ? Duration.zero : const Duration(milliseconds: 300);
-    final style = TextStyle(
-      color: palette.dim,
-      fontSize: 19,
-      fontWeight: FontWeight.w500,
-    );
-    Widget fade(Widget child) => AnimatedOpacity(
-        opacity: paused ? 1 : 0, duration: duration, child: child);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Stack(
-        children: <Widget>[
-          Align(
-            alignment: const Alignment(-1, -0.55),
-            child: fade(Text('-$step ${l10n.wpm}', style: style)),
-          ),
-          Align(
-            alignment: const Alignment(1, -0.55),
-            child: fade(Text('+$step ${l10n.wpm}', style: style)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _FeedbackChip extends StatelessWidget {
   const _FeedbackChip({required this.text, required this.palette});
 
@@ -591,9 +584,9 @@ class _FastBottomBar extends StatelessWidget {
     required this.state,
     required this.palette,
     required this.modeLocked,
-    required this.paused,
-    required this.reduced,
+    required this.uniform,
     required this.onToggleModeLock,
+    required this.onToggleUniform,
     required this.onPlayPause,
   });
 
@@ -601,16 +594,14 @@ class _FastBottomBar extends StatelessWidget {
   final FastModeState state;
   final ReaderPalette palette;
   final bool modeLocked;
-  final bool paused;
-  final bool reduced;
+  final bool uniform;
   final VoidCallback onToggleModeLock;
+  final VoidCallback onToggleUniform;
   final VoidCallback onPlayPause;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final duration =
-        reduced ? Duration.zero : const Duration(milliseconds: 300);
     return SafeArea(
       top: false,
       child: Padding(
@@ -651,7 +642,7 @@ class _FastBottomBar extends StatelessWidget {
                   ),
                 ),
               ),
-              // Left cluster: mode lock + the paused-only "Lock rotation" hint.
+              // Left cluster: mode lock + the words display-mode toggle.
               Align(
                 alignment: Alignment.centerLeft,
                 child: Row(
@@ -664,14 +655,15 @@ class _FastBottomBar extends StatelessWidget {
                           modeLocked ? Icons.lock : Icons.lock_open_outlined),
                       onPressed: onToggleModeLock,
                     ),
-                    AnimatedOpacity(
-                      opacity: paused ? 1 : 0,
-                      duration: duration,
-                      child: Text(
-                        l10n.readerModeLock,
-                        style: theme.textTheme.bodyMedium
-                            ?.copyWith(color: palette.dim),
-                      ),
+                    IconButton(
+                      tooltip: uniform
+                          ? l10n.fastMagnifiedWords
+                          : l10n.fastUniformWords,
+                      color: palette.text,
+                      icon: Icon(uniform
+                          ? Icons.format_size
+                          : Icons.text_fields_outlined),
+                      onPressed: onToggleUniform,
                     ),
                   ],
                 ),
@@ -688,6 +680,80 @@ class _FastBottomBar extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One-time step-by-step guide shown on the very first fast-mode open. Each
+/// tap advances; the last tap dismisses (persisted, never shown again).
+class _FastGuide extends StatelessWidget {
+  const _FastGuide({
+    required this.step,
+    required this.l10n,
+    required this.onAdvance,
+  });
+
+  final int step;
+  final AppLocalizations l10n;
+  final VoidCallback onAdvance;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = switch (step) {
+      0 => l10n.fastGuideStep1,
+      1 => l10n.fastGuideStep2,
+      2 => l10n.fastGuideStep3,
+      3 => l10n.fastGuideStep4,
+      _ => l10n.fastGuideStep5,
+    };
+    // Where the message sits, mirroring the control it describes: left/right
+    // tap zones, centre, then the two bottom-left icons.
+    final alignment = switch (step) {
+      0 => const Alignment(-0.8, 0),
+      1 => const Alignment(0.8, 0),
+      2 => Alignment.center,
+      _ => const Alignment(-0.85, 0.9),
+    };
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onAdvance,
+      child: ColoredBox(
+        color: Colors.black.withValues(alpha: 0.55),
+        child: Stack(
+          children: <Widget>[
+            Align(
+              alignment: alignment,
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 300),
+                  child: Text(
+                    text,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Align(
+              alignment: const Alignment(0, 0.75),
+              child: Text(
+                '${l10n.fastGuideContinue} · ${step + 1}/5',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
