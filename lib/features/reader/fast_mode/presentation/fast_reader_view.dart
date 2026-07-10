@@ -394,10 +394,10 @@ class _WordRow extends StatelessWidget {
   /// and an edge-crossing word stays visible (clipped), never hidden.
   final bool scrubbing;
 
-  /// Uniform display mode: every word renders at the same size (34pt — above
-  /// side words, below the magnified centre) in the full text colour. Nothing
-  /// shows ahead of the current word (no right side) and the left side spans
-  /// to the screen edge.
+  /// Uniform display mode: every word renders at the same size (31pt — above
+  /// side words, below the magnified centre) in the full text colour. While
+  /// playing, nothing shows ahead of the current word (no right side) and the
+  /// left side spans to the screen edge; paused/scrubbing show both sides.
   final bool uniform;
 
   /// Fraction of the half-width the playing-mode border sits at. Kept tight
@@ -435,29 +435,24 @@ class _WordRow extends StatelessWidget {
       duration: reduced ? Duration.zero : const Duration(milliseconds: 250),
       curve: Curves.easeOut,
       builder: (context, scrubT, _) {
-        // Hold-to-scrub grow, centre-weighted for BOTH modes: the word at
-        // the centre grows the most (+18%) and the effect tapers linearly to
-        // nothing six words out.
-        double growFor(int distance) {
-          final fall = (1 - distance / 6).clamp(0.0, 1.0);
-          return 1 + 0.18 * scrubT * fall;
-        }
-
         final currentStyle = fontFamily.applyTo(TextStyle(
           // Uniform words sit between the side words (28) and the magnified
-          // centre (58).
-          fontSize: (uniform ? 34 : 58) * growFor(0) * scale,
+          // centre (58); in uniform mode every word (centre included) grows
+          // together while scrubbing. The magnified centre never grows.
+          fontSize: (uniform ? 31 + 6 * scrubT : 58) * scale,
           fontWeight: uniform ? FontWeight.w400 : FontWeight.w600,
           color: palette.text,
           height: 1.0,
         ));
-        TextStyle sideStyleFor(int step) => fontFamily.applyTo(TextStyle(
-              fontSize: (uniform ? 34 : 28) * growFor(step) * scale,
-              color: uniform
-                  ? palette.text
-                  : Color.lerp(palette.dim, palette.text, 0.55 * scrubT),
-              height: 1.0,
-            ));
+        // Side words grow uniformly (+6pt) while scrubbing; magnified mode
+        // also lifts their contrast.
+        final sideStyle = fontFamily.applyTo(TextStyle(
+          fontSize: ((uniform ? 31 : 28) + 6 * scrubT) * scale,
+          color: uniform
+              ? palette.text
+              : Color.lerp(palette.dim, palette.text, 0.55 * scrubT),
+          height: 1.0,
+        ));
         return LayoutBuilder(builder: (context, constraints) {
           final maxW = constraints.maxWidth;
           final maxH = constraints.maxHeight;
@@ -503,7 +498,7 @@ class _WordRow extends StatelessWidget {
           final unbounded = scrubbing || !playing;
 
           // Floor-align every word (shared bottom) with the row vertically centred.
-          final sideH = measure('Ag', sideStyleFor(1)).height;
+          final sideH = measure('Ag', sideStyle).height;
           final rowH = centreH > sideH ? centreH : sideH;
           final bottom = (maxH - rowH) / 2;
 
@@ -524,8 +519,10 @@ class _WordRow extends StatelessWidget {
 
           if (showAdjacent && currentText.isNotEmpty) {
             for (final dir in const <int>[-1, 1]) {
-              // Uniform mode shows nothing ahead of the current word.
-              if (uniform && dir == 1) continue;
+              // Uniform mode shows nothing ahead of the current word while
+              // playing; paused/scrubbing show the right side like magnified
+              // mode.
+              if (uniform && dir == 1 && playing) continue;
               // Uniform mode's left side always spans to the screen edge
               // (no barrier), like paused/scrubbing.
               final sideUnbounded = unbounded || uniform;
@@ -535,8 +532,7 @@ class _WordRow extends StatelessWidget {
               for (var step = 1; step <= _maxWordsPerSide; step++) {
                 final text = state.tokenAt(dir * step)?.rawText;
                 if (text == null || text.isEmpty) break;
-                final style = sideStyleFor(step);
-                final w = measure(text, style).width;
+                final w = measure(text, sideStyle).width;
                 if (w <= 0) break;
                 if (sideUnbounded) {
                   // No hide-barrier: stop only once fully offscreen; a word
@@ -552,7 +548,8 @@ class _WordRow extends StatelessWidget {
                 children.add(Positioned(
                   left: dir < 0 ? centreX - inner - w : centreX + inner,
                   bottom: bottom,
-                  child: Text(text, style: style, maxLines: 1, softWrap: false),
+                  child: Text(text,
+                      style: sideStyle, maxLines: 1, softWrap: false),
                 ));
                 inner += w + gap;
               }
