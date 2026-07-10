@@ -397,8 +397,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
           context: context,
           isScrollControlled: true,
           showDragHandle: false,
-          enableDrag: false,
-          isDismissible: false,
           // Keeps the sheet below the status bar / Dynamic Island — modal
           // bottom sheets strip the top MediaQuery padding, so the header
           // and its close button would otherwise sit under the island.
