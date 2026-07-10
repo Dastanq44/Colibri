@@ -185,10 +185,10 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
         }
         return Scaffold(
           backgroundColor: palette.background,
-          body: SafeArea(
-            child: Stack(
-              children: <Widget>[
-                Column(
+          body: Stack(
+            children: <Widget>[
+              SafeArea(
+                child: Column(
                   children: <Widget>[
                     Expanded(
                       // Pinch anywhere to resize the words; single taps fall
@@ -333,24 +333,25 @@ class _FastReaderViewState extends ConsumerState<FastReaderView> {
                     ),
                   ],
                 ),
-                // One-time step-by-step guide over everything.
-                if (_guideStep != null)
-                  Positioned.fill(
-                    child: _FastGuide(
-                      step: _guideStep!,
-                      l10n: l10n,
-                      onAdvance: () {
-                        if (_guideStep! >= 4) {
-                          ref.read(fastGuideSeenProvider.notifier).markSeen();
-                          setState(() => _guideStep = null);
-                        } else {
-                          setState(() => _guideStep = _guideStep! + 1);
-                        }
-                      },
-                    ),
+              ),
+              // One-time step-by-step guide. Outside the SafeArea so the dim
+              // covers the entire screen, sensor housing included.
+              if (_guideStep != null)
+                Positioned.fill(
+                  child: _FastGuide(
+                    step: _guideStep!,
+                    l10n: l10n,
+                    onAdvance: () {
+                      if (_guideStep! >= 4) {
+                        ref.read(fastGuideSeenProvider.notifier).markSeen();
+                        setState(() => _guideStep = null);
+                      } else {
+                        setState(() => _guideStep = _guideStep! + 1);
+                      }
+                    },
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
         );
       },
@@ -393,9 +394,10 @@ class _WordRow extends StatelessWidget {
   /// and an edge-crossing word stays visible (clipped), never hidden.
   final bool scrubbing;
 
-  /// Uniform display mode: every word (centre included) renders at the same
-  /// size and full text colour — no magnification, no dimming, no scrub
-  /// emphasis.
+  /// Uniform display mode: every word renders at the same size (34pt — above
+  /// side words, below the magnified centre) in the full text colour. Nothing
+  /// shows ahead of the current word (no right side) and the left side spans
+  /// to the screen edge.
   final bool uniform;
 
   /// Fraction of the half-width the playing-mode border sits at. Kept tight
@@ -413,12 +415,6 @@ class _WordRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textScaler = MediaQuery.textScalerOf(context);
-    final currentStyle = fontFamily.applyTo(TextStyle(
-      fontSize: (uniform ? 28 : 58) * scale,
-      fontWeight: uniform ? FontWeight.w400 : FontWeight.w600,
-      color: palette.text,
-      height: 1.0,
-    ));
     final showAdjacent = state.settings.showAdjacentContext;
     final playing = state.isPlaying;
 
@@ -439,16 +435,29 @@ class _WordRow extends StatelessWidget {
       duration: reduced ? Duration.zero : const Duration(milliseconds: 250),
       curve: Curves.easeOut,
       builder: (context, scrubT, _) {
-        // Uniform mode: side words match the centre word exactly (same size,
-        // full text colour, no scrub emphasis). Otherwise: 28pt dimmed words
-        // that grow and gain contrast while scrubbing.
-        final sideStyle = fontFamily.applyTo(TextStyle(
-          fontSize: (uniform ? 28 : 28 + 6 * scrubT) * scale,
-          color: uniform
-              ? palette.text
-              : Color.lerp(palette.dim, palette.text, 0.55 * scrubT),
+        // Hold-to-scrub grow, centre-weighted for BOTH modes: the word at
+        // the centre grows the most (+18%) and the effect tapers linearly to
+        // nothing six words out.
+        double growFor(int distance) {
+          final fall = (1 - distance / 6).clamp(0.0, 1.0);
+          return 1 + 0.18 * scrubT * fall;
+        }
+
+        final currentStyle = fontFamily.applyTo(TextStyle(
+          // Uniform words sit between the side words (28) and the magnified
+          // centre (58).
+          fontSize: (uniform ? 34 : 58) * growFor(0) * scale,
+          fontWeight: uniform ? FontWeight.w400 : FontWeight.w600,
+          color: palette.text,
           height: 1.0,
         ));
+        TextStyle sideStyleFor(int step) => fontFamily.applyTo(TextStyle(
+              fontSize: (uniform ? 34 : 28) * growFor(step) * scale,
+              color: uniform
+                  ? palette.text
+                  : Color.lerp(palette.dim, palette.text, 0.55 * scrubT),
+              height: 1.0,
+            ));
         return LayoutBuilder(builder: (context, constraints) {
           final maxW = constraints.maxWidth;
           final maxH = constraints.maxHeight;
@@ -494,7 +503,7 @@ class _WordRow extends StatelessWidget {
           final unbounded = scrubbing || !playing;
 
           // Floor-align every word (shared bottom) with the row vertically centred.
-          final sideH = measure('Ag', sideStyle).height;
+          final sideH = measure('Ag', sideStyleFor(1)).height;
           final rowH = centreH > sideH ? centreH : sideH;
           final bottom = (maxH - rowH) / 2;
 
@@ -515,15 +524,21 @@ class _WordRow extends StatelessWidget {
 
           if (showAdjacent && currentText.isNotEmpty) {
             for (final dir in const <int>[-1, 1]) {
+              // Uniform mode shows nothing ahead of the current word.
+              if (uniform && dir == 1) continue;
+              // Uniform mode's left side always spans to the screen edge
+              // (no barrier), like paused/scrubbing.
+              final sideUnbounded = unbounded || uniform;
               // Distance from the centre to this word's near (inner) edge, which
               // starts at the current word's actual edge on this side.
               var inner = (dir < 0 ? leftHalf : rightHalf) + gap;
               for (var step = 1; step <= _maxWordsPerSide; step++) {
                 final text = state.tokenAt(dir * step)?.rawText;
                 if (text == null || text.isEmpty) break;
-                final w = measure(text, sideStyle).width;
+                final style = sideStyleFor(step);
+                final w = measure(text, style).width;
                 if (w <= 0) break;
-                if (unbounded) {
+                if (sideUnbounded) {
                   // No hide-barrier: stop only once fully offscreen; a word
                   // crossing the screen edge still shows its visible part (cut).
                   if (inner >= maxW / 2) break;
@@ -537,8 +552,7 @@ class _WordRow extends StatelessWidget {
                 children.add(Positioned(
                   left: dir < 0 ? centreX - inner - w : centreX + inner,
                   bottom: bottom,
-                  child: Text(text,
-                      style: sideStyle, maxLines: 1, softWrap: false),
+                  child: Text(text, style: style, maxLines: 1, softWrap: false),
                 ));
                 inner += w + gap;
               }
@@ -711,19 +725,38 @@ class _FastGuide extends StatelessWidget {
     // Where the message sits, mirroring the control it describes: left/right
     // tap zones, centre, then the two bottom-left icons.
     final alignment = switch (step) {
-      0 => const Alignment(-0.8, 0),
-      1 => const Alignment(0.8, 0),
+      0 => const Alignment(-0.55, 0),
+      1 => const Alignment(0.55, 0),
       2 => Alignment.center,
-      _ => const Alignment(-0.85, 0.9),
+      3 => const Alignment(-0.92, 0.55),
+      _ => const Alignment(-0.72, 0.55),
     };
-
+    // Arrow pointing at the target: screen edges for the tap zones, a tap
+    // glyph for the centre, and down toward the two bottom-left buttons.
+    final (IconData arrowIcon, Alignment arrowAlignment) = switch (step) {
+      // Not at the extreme edge: the landscape sensor housing would cover it.
+      0 => (Icons.arrow_back, const Alignment(-0.82, 0)),
+      1 => (Icons.arrow_forward, const Alignment(0.82, 0)),
+      2 => (Icons.touch_app_outlined, const Alignment(0, -0.35)),
+      3 => (Icons.arrow_downward, const Alignment(-0.96, 0.92)),
+      _ => (Icons.arrow_downward, const Alignment(-0.82, 0.92)),
+    };
+    // White-on-dim works on all three reading themes (the scrim normalises
+    // the background).
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onAdvance,
       child: ColoredBox(
-        color: Colors.black.withValues(alpha: 0.55),
+        color: Colors.black.withValues(alpha: 0.6),
         child: Stack(
           children: <Widget>[
+            Align(
+              alignment: arrowAlignment,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Icon(arrowIcon, color: Colors.white, size: 34),
+              ),
+            ),
             Align(
               alignment: alignment,
               child: Padding(
@@ -744,7 +777,7 @@ class _FastGuide extends StatelessWidget {
               ),
             ),
             Align(
-              alignment: const Alignment(0, 0.75),
+              alignment: const Alignment(0, 0.8),
               child: Text(
                 '${l10n.fastGuideContinue} · ${step + 1}/5',
                 style: TextStyle(

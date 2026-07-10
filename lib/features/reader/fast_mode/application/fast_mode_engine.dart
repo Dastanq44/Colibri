@@ -114,7 +114,9 @@ class FastModeEngine extends ChangeNotifier {
     _wpmTouched = true;
     _set(_state.copyWith(wpm: clamped));
     onWpmChanged?.call(clamped);
-    if (_state.isPlaying) _startTimer(); // apply new interval
+    // No timer restart: re-arming would reset the current word's dwell,
+    // which reads as a stutter on every ±WPM tap. The timer chain re-arms
+    // after each word and reads the fresh WPM then.
     return true;
   }
 
@@ -124,7 +126,8 @@ class FastModeEngine extends ChangeNotifier {
     final base = _wpmTouched ? _state.wpm : settings.wpm;
     final wpm = base.clamp(settings.minWpm, settings.maxWpm);
     _set(_state.copyWith(settings: settings, wpm: wpm));
-    if (_state.isPlaying) _startTimer();
+    // No timer restart (see _changeWpm): the per-word re-arm picks up the
+    // new settings without resetting the current word's dwell.
   }
 
   void seekToTokenIndex(int index) {
